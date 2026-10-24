@@ -1,0 +1,17 @@
+{
+  "theme_id": "minimalist-oled-dark",
+  "theme_name": "Minimalist OLED",
+  "version": "1.0.0",
+  "author": "Mandala Team",
+  "tokens": {
+    "canvas_bg": "#000000",
+    "surface_primary": "#121212",
+    "surface_border": "#242424",
+    "text_primary": "#E0E0E0",
+    "text_secondary": "#7D7D7D",
+    "accent_focus": "#D4A373",
+    "border_width_px": 0,
+    "corner_radius_px": 4,
+    "font_family": "Inter Display"
+  }
+}

@@ -1,0 +1,17 @@
+[package]
+name = "mandala-sign"
+description = "Key generation, signing and installation of Mandala modules"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+mandala-core = { workspace = true }
+anyhow = { workspace = true }
+ed25519-dalek = { workspace = true }
+hex = { workspace = true }
+rand = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"

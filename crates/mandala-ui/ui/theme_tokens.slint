@@ -1,0 +1,22 @@
+// Declarative theme tokens. Rust (`mandala_ui::apply_theme`) overwrites these
+// at runtime from the active JSON theme manifest; the values below are the
+// fallback used before the first theme is applied.
+export global ThemePalette {
+    in-out property <color> canvas-bg: #000000;
+    in-out property <color> surface-primary: #121212;
+    in-out property <color> surface-border: #242424;
+    in-out property <color> text-primary: #E0E0E0;
+    in-out property <color> text-secondary: #7D7D7D;
+    in-out property <color> accent-focus: #D4A373;
+    in-out property <length> border-width: 0px;
+    in-out property <length> corner-radius: 4px;
+    in-out property <string> font-family: "Inter";
+}
+
+// Width-class breakpoints for phones, foldables and tri-fold / large panels.
+export global Responsive {
+    in-out property <length> window-width: 412px;
+    out property <bool> is-compact: window-width < 600px;
+    out property <bool> is-medium: window-width >= 600px && window-width < 840px;
+    out property <bool> is-expanded: window-width >= 840px;
+}

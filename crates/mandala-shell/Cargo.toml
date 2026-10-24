@@ -1,0 +1,32 @@
+[package]
+name = "mandala-shell"
+description = "Mandala launcher binary: wires the Slint UI to the Rust core engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lib]
+crate-type = ["lib", "cdylib"] # cdylib is the Android entry (libmandala_shell.so)
+
+[[bin]]
+name = "mandala-shell"
+path = "src/main.rs"
+
+[features]
+default = []
+# Build for Android: `cargo ndk -t arm64-v8a build --lib --features android`
+# (adjust the Slint backend feature if you pin a different Slint release).
+android = ["slint/backend-android-activity-06"]
+
+[dependencies]
+mandala-core = { workspace = true }
+mandala-ui = { workspace = true }
+anyhow = { workspace = true }
+log = { workspace = true }
+env_logger = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+mandala-module-api = { workspace = true }
+# Default features = winit backend + FemtoVG GPU renderer for desktop dev.
+slint = { version = "1.9" }

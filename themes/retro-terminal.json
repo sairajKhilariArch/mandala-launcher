@@ -1,0 +1,17 @@
+{
+  "theme_id": "retro-terminal",
+  "theme_name": "Retro Terminal",
+  "version": "1.0.0",
+  "author": "Mandala Team",
+  "tokens": {
+    "canvas_bg": "#0D1117",
+    "surface_primary": "#10161D",
+    "surface_border": "#00FF66",
+    "text_primary": "#00FF66",
+    "text_secondary": "#00A844",
+    "accent_focus": "#B6FFD0",
+    "border_width_px": 1,
+    "corner_radius_px": 0,
+    "font_family": "monospace"
+  }
+}

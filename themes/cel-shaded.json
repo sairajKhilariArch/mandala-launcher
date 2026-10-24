@@ -1,0 +1,17 @@
+{
+  "theme_id": "cel-shaded",
+  "theme_name": "Cartoonish / Cel-Shaded",
+  "version": "1.0.0",
+  "author": "Mandala Team",
+  "tokens": {
+    "canvas_bg": "#FFF9EC",
+    "surface_primary": "#FFFFFF",
+    "surface_border": "#111111",
+    "text_primary": "#111111",
+    "text_secondary": "#5A5248",
+    "accent_focus": "#FF6B6B",
+    "border_width_px": 2,
+    "corner_radius_px": 14,
+    "font_family": "Inter"
+  }
+}

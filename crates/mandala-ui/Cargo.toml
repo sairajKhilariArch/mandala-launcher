@@ -1,0 +1,16 @@
+[package]
+name = "mandala-ui"
+description = "Slint declarative UI for the Mandala tri-panel launcher"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+build = "build.rs"
+
+[dependencies]
+mandala-core = { workspace = true }
+# Backends/renderers are chosen by the final binary (see mandala-shell).
+slint = { version = "1.9", default-features = false, features = ["std", "compat-1-2"] }
+
+[build-dependencies]
+slint-build = "1.9"
