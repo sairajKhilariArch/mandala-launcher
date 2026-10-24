@@ -1,0 +1,154 @@
+name: Release
+
+# Push a tag like v0.1.0 to build, test, package and publish a GitHub Release.
+# workflow_dispatch builds the artifacts without publishing (dry run).
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest,  name: linux-x86_64,   prefix: lib, ext: so,    exe: "" }
+          - { os: macos-latest,   name: macos-arm64,    prefix: lib, ext: dylib, exe: "" }
+          - { os: windows-latest, name: windows-x86_64, prefix: "",  ext: dll,   exe: ".exe" }
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux GUI build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libfontconfig1-dev libxkbcommon-dev libxkbcommon-x11-dev \
+            libwayland-dev libx11-dev libxcb1-dev libgl1-mesa-dev libegl1-mesa-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Test
+        run: cargo test --workspace
+
+      - name: Build (release)
+        run: cargo build --release --workspace
+
+      - name: Package
+        env:
+          # Optional: sign the example modules in CI. Secret = hex Ed25519
+          # secret key from `mandala-sign keygen`; variable = matching hex
+          # public key. Without them modules are shipped unsigned.
+          SIGNING_KEY: ${{ secrets.MANDALA_SIGNING_KEY }}
+          PUBLIC_KEY: ${{ vars.MANDALA_PUBLIC_KEY }}
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME:-dev}"
+          NAME="mandala-${VERSION}-${{ matrix.name }}"
+          D="dist/${NAME}"
+          REL=target/release
+          mkdir -p "$D/themes" "$D/modules-unsigned"
+          cp "$REL/mandala-shell${{ matrix.exe }}" "$REL/mandala-sign${{ matrix.exe }}" "$D/"
+          cp themes/*.json "$D/themes/"
+          cp README.md "$D/"
+          for m in app_notes app_calculator; do
+            cp "$REL/${{ matrix.prefix }}${m}.${{ matrix.ext }}" "$D/modules-unsigned/"
+          done
+
+          if [ -n "${SIGNING_KEY:-}" ] && [ -n "${PUBLIC_KEY:-}" ]; then
+            umask 077
+            printf '%s\n' "$SIGNING_KEY" > "$RUNNER_TEMP/host.key"
+            mkdir -p "$D/mandala-home/trust"
+            printf '%s\n' "$PUBLIC_KEY" > "$D/mandala-home/trust/host.pub"
+            "$REL/mandala-sign${{ matrix.exe }}" install \
+              --home "$D/mandala-home" --key "$RUNNER_TEMP/host.key" \
+              "$D"/modules-unsigned/*
+            rm -f "$RUNNER_TEMP/host.key"
+            rm -rf "$D/modules-unsigned"
+            echo "Modules signed."
+          else
+            echo "::warning::MANDALA_SIGNING_KEY / MANDALA_PUBLIC_KEY not set: shipping unsigned modules."
+          fi
+
+          cd dist
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            7z a -tzip "${NAME}.zip" "${NAME}" > /dev/null
+            ARCHIVE="${NAME}.zip"
+          else
+            tar czf "${NAME}.tar.gz" "${NAME}"
+            ARCHIVE="${NAME}.tar.gz"
+          fi
+          (sha256sum "$ARCHIVE" 2>/dev/null || shasum -a 256 "$ARCHIVE") > "${ARCHIVE}.sha256"
+          rm -rf "${NAME}"
+          ls -la
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/*.sha256
+          if-no-files-found: error
+
+  # Experimental: the Android build path has not been exercised yet, so a
+  # failure here does not block the release.
+  android:
+    name: Build android-arm64 (experimental)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --locked
+      - name: Build libmandala_shell.so
+        run: cargo ndk -t arm64-v8a build --release -p mandala-shell --lib --features android
+      - name: Collect
+        run: |
+          VERSION="${GITHUB_REF_NAME:-dev}"
+          mkdir -p dist
+          cp target/aarch64-linux-android/release/libmandala_shell.so "dist/mandala-${VERSION}-android-arm64-libmandala_shell.so"
+          (cd dist && sha256sum ./*.so > "mandala-${VERSION}-android-arm64.sha256")
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-arm64
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub Release
+    needs: [build, android]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Combined checksums
+        run: |
+          cd dist
+          cat ./*.sha256 > SHA256SUMS.txt
+          ls -la
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
