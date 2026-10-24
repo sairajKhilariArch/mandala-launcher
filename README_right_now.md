@@ -173,16 +173,19 @@ if you pin a different Slint release.
 Verified in this repository (Rust 1.98, Linux x86_64):
 
 * `cargo build --workspace` succeeds, including the Slint build script.
-* `cargo test --workspace`: **109 tests pass** (55 core, 9 terminal, 9 2FA,
+* `cargo test --workspace`: **111 tests pass** (57 core, 9 terminal, 9 2FA,
   9 vault, 7 LocalSend, 7 calculator, 6 notes, 3 module API, 4 sign tool).
+* `cargo clippy --workspace --all-targets`: no errors; only pre-existing style
+  warnings in `app-calculator` and `mandala-shell` remain.
 * `scripts/dev-setup.sh` builds, keygens, signs and installs all six modules.
 * `mandala-shell --selftest` (headless) verifies + `dlopen`s every installed
   module and calls its `launch` action through the host, so the signature and
   ABI pipeline is exercised end to end.
-* The shell starts against a real display: `boot: interactive after 1.27 s,
-  process RSS 36.9 MiB` in a **debug** build on a loaded 4-core machine. See
-  `docs/performance.md` for the release numbers and why the 20 ms / 5 MB
-  design targets are not met by the GUI stack.
+* The shell starts against a real display. Release build: `boot: interactive
+  after 0.85–1.28 s, process RSS 16.3–16.9 MiB` (three runs); debug build:
+  `1.27 s, 36.9 MiB`. The headless engine alone is `0.29 ms / 3.5 MiB`
+  (release). See [`docs/performance.md`](docs/performance.md) — the 20 ms /
+  5 MB budgets are met by the engine, not by the Slint/winit GUI stack.
 * The LocalSend module is exercised over real loopback TCP in its tests
   (handshake, token rejection, checksum rejection, file landed on disk).
 

@@ -233,7 +233,7 @@ impl Terminal {
             "help" | "?" => Ok(HELP.to_string()),
             "clear" => Ok(String::new()),
             "echo" => Ok(rest.to_string()),
-            "pwd" => Ok(self.display(&self.root()?.to_path_buf())),
+            "pwd" => Ok(self.display(self.root()?)),
             "date" | "time" => Ok(format_utc(now_secs())),
             "uname" => Ok(format!(
                 "mandala-terminal 1 ({} {}, abi {})",
