@@ -105,28 +105,28 @@ jobs:
             dist/*.sha256
           if-no-files-found: error
 
-  # Experimental: the Android build path has not been exercised yet, so a
-  # failure here does not block the release.
+  # Android: build native modules and APK
   android:
-    name: Build android-arm64 (experimental)
+    name: Build android-arm64 (apk)
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-linux-android
       - uses: Swatinem/rust-cache@v2
-      - name: Install cargo-ndk
-        run: cargo install cargo-ndk --locked
+      - name: Install cargo-apk
+        run: cargo install cargo-apk --locked --version 0.22
       - name: Build libmandala_shell.so
         run: cargo ndk -t arm64-v8a build --release -p mandala-shell --lib --features android
-      - name: Collect
+      - name: Build APK
         run: |
           VERSION="${GITHUB_REF_NAME:-dev}"
           mkdir -p dist
-          cp target/aarch64-linux-android/release/libmandala_shell.so "dist/mandala-${VERSION}-android-arm64-libmandala_shell.so"
-          (cd dist && sha256sum ./*.so > "mandala-${VERSION}-android-arm64.sha256")
+          cargo apk build --release -p mandala-shell
+          # Move the generated APK to dist with versioned name
+          cp target/aarch64-linux-android/release/bundle/*.apk "dist/mandala-${VERSION}-android-arm64.apk"
+          (cd dist && sha256sum ./*.apk > "mandala-${VERSION}-android-arm64.sha256")
       - uses: actions/upload-artifact@v4
         with:
           name: android-arm64
