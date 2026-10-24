@@ -69,6 +69,18 @@ pub enum Command {
     Theme(String),
     /// `monitor` opens the module process monitor.
     Monitor,
+    /// `> ls` -> terminal `run` (sandboxed command shell).
+    Terminal(String),
+    /// `2fa add …` -> authenticator `run`.
+    Aegis(String),
+    /// `vault get …` -> vault `run`.
+    Vault(String),
+    /// `lsend recv 8080 token` -> LocalSend `run`.
+    LocalSend(String),
+    /// `wallpaper /sdcard/pic.png` -> Android wallpaper change.
+    Wallpaper(String),
+    /// `overlay` -> request the Android draw-over-other-apps permission.
+    Overlay,
     /// Launch the slot with this id.
     Launch(&'static str),
     Empty,
@@ -87,6 +99,10 @@ pub fn parse_command(input: &str) -> Command {
         }
         return Command::Calc(rest.to_string());
     }
+    // `>` is an explicit shell prompt so ordinary fuzzy search stays untouched.
+    if let Some(rest) = s.strip_prefix('>') {
+        return Command::Terminal(rest.trim().to_string());
+    }
     let (head, tail) = match s.split_once(char::is_whitespace) {
         Some((h, t)) => (h, t.trim()),
         None => (s, ""),
@@ -95,6 +111,11 @@ pub fn parse_command(input: &str) -> Command {
         "note" | "n" if !tail.is_empty() => return Command::Note(tail.to_string()),
         "theme" if !tail.is_empty() => return Command::Theme(tail.to_string()),
         "monitor" | "ps" => return Command::Monitor,
+        "2fa" | "totp" | "aegis" => return Command::Aegis(tail.to_string()),
+        "vault" | "passwords" => return Command::Vault(tail.to_string()),
+        "lsend" | "localsend" => return Command::LocalSend(tail.to_string()),
+        "wallpaper" | "wall" if !tail.is_empty() => return Command::Wallpaper(tail.to_string()),
+        "overlay" => return Command::Overlay,
         _ => {}
     }
     match search_slots(s, 1).first() {
@@ -135,6 +156,22 @@ mod tests {
         assert_eq!(parse_command("monitor"), Command::Monitor);
         assert_eq!(parse_command("termin"), Command::Launch("app-terminal"));
         assert_eq!(parse_command("qqqqzz"), Command::NoMatch("qqqqzz".into()));
+    }
+
+    #[test]
+    fn module_command_prefixes() {
+        assert_eq!(parse_command("> ls -a"), Command::Terminal("ls -a".into()));
+        assert_eq!(parse_command(">"), Command::Terminal("".into()));
+        assert_eq!(parse_command("2fa"), Command::Aegis("".into()));
+        assert_eq!(parse_command("2fa code github"), Command::Aegis("code github".into()));
+        assert_eq!(parse_command("vault unlock hunter2"), Command::Vault("unlock hunter2".into()));
+        assert_eq!(parse_command("lsend recv 8080 tok!"), Command::LocalSend("recv 8080 tok!".into()));
+        assert_eq!(parse_command("wallpaper /sdcard/a.png"), Command::Wallpaper("/sdcard/a.png".into()));
+        assert_eq!(parse_command("overlay"), Command::Overlay);
+        // Bare `wall` still falls through to fuzzy search (no slot matched here).
+        assert!(matches!(parse_command("wall"), Command::NoMatch(_) | Command::Launch(_)));
+        // Ordinary fuzzy search is unaffected.
+        assert_eq!(parse_command("term"), Command::Launch("app-terminal"));
     }
 
     #[test]

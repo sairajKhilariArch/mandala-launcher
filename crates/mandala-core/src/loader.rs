@@ -288,6 +288,11 @@ pub fn format_monitor(statuses: &[ModuleStatus]) -> String {
         out.push_str(&line);
         out.push('\n');
     }
+    out.push('\n');
+    match crate::sys::process_rss_kb() {
+        Some(kb) => out.push_str(&format!("process RSS: {kb} KiB (design target < 5120 KiB)\n")),
+        None => out.push_str("process RSS: not exposed by this OS\n"),
+    }
     out
 }
 

@@ -10,6 +10,7 @@
 //! * [`slots`]    – the 15-slot tri-panel matrix
 //! * [`theme`]    – JSON theme manifests and presets
 //! * [`paths`]    – on-disk layout
+//! * [`sys`]      – process RSS introspection (performance budget)
 
 pub mod command;
 pub mod crypto;
@@ -21,6 +22,7 @@ pub mod paths;
 pub mod router;
 pub mod slots;
 pub mod state;
+pub mod sys;
 pub mod theme;
 
 pub use error::{MandalaError, Result};

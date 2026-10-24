@@ -11,8 +11,11 @@ export { ThemePalette, Responsive, SlotItem }
 // file only reports raw pointer down/up events.
 export component MainWindow inherits Window {
     title: "Mandala";
-    preferred-width: 412px;
-    preferred-height: 915px;
+    // Explicit size (not `preferred-*`): the padding below is derived from
+    // `expanded`, and letting the window auto-size from its content would make
+    // that a binding loop (Slint >= 1.10 rejects it at runtime).
+    width: 412px;
+    height: 915px;
     background: ThemePalette.canvas-bg;
 
     in property <[SlotItem]> panel-a;

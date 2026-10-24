@@ -59,7 +59,7 @@ impl Default for AppState {
     }
 }
 
-pub const HOME_HINT: &str = "Type to search apps.\n= 2+2   calculate\nnote ...   quick note\ntheme next   switch theme\nmonitor   module processes";
+pub const HOME_HINT: &str = "Type to search apps.\n= 2+2   calculate\nnote ...   quick note\n> ls   terminal\n2fa   authenticator\nvault   passwords\nlsend   local transfer\ntheme next   switch theme\nmonitor   module processes";
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Action {
@@ -89,6 +89,10 @@ pub enum Effect {
     UnloadAll,
     RestartAll,
     SetTheme(String),
+    /// Android-only: set the system wallpaper from a local image.
+    SetWallpaper(String),
+    /// Android-only: ask for the draw-over-other-apps permission.
+    RequestOverlay,
 }
 
 pub fn reduce(state: &mut AppState, action: Action) -> Vec<Effect> {
@@ -180,6 +184,28 @@ pub fn reduce(state: &mut AppState, action: Action) -> Vec<Effect> {
                     state.active_module = Some("app-notes".into());
                     fx.push(Effect::CallModule { module: "app-notes".into(), action: "append".into(), payload: text });
                 }
+                Command::Terminal(cmd) => {
+                    state.active_module = Some("app-terminal".into());
+                    state.canvas_text = format!("> {cmd}");
+                    fx.push(Effect::CallModule { module: "app-terminal".into(), action: "run".into(), payload: cmd });
+                }
+                Command::Aegis(cmd) => {
+                    state.active_module = Some("app-aegis".into());
+                    fx.push(Effect::CallModule { module: "app-aegis".into(), action: "run".into(), payload: cmd });
+                }
+                Command::Vault(cmd) => {
+                    state.active_module = Some("app-vault".into());
+                    fx.push(Effect::CallModule { module: "app-vault".into(), action: "run".into(), payload: cmd });
+                }
+                Command::LocalSend(cmd) => {
+                    state.active_module = Some("app-localsend".into());
+                    fx.push(Effect::CallModule { module: "app-localsend".into(), action: "run".into(), payload: cmd });
+                }
+                Command::Wallpaper(path) => {
+                    state.active_module = None;
+                    fx.push(Effect::SetWallpaper(path));
+                }
+                Command::Overlay => fx.push(Effect::RequestOverlay),
                 Command::Theme(key) => fx.push(Effect::SetTheme(key)),
                 Command::Monitor => {
                     state.monitor_open = true;
@@ -343,6 +369,29 @@ mod tests {
         s.query = "monitor".into();
         assert_eq!(reduce(&mut s, Action::QuerySubmitted), vec![Effect::RefreshMonitor]);
         assert!(s.monitor_open);
+
+        s.query = "> ls".into();
+        let fx = reduce(&mut s, Action::QuerySubmitted);
+        assert_eq!(fx, vec![Effect::CallModule { module: "app-terminal".into(), action: "run".into(), payload: "ls".into() }]);
+        assert_eq!(s.active_module.as_deref(), Some("app-terminal"));
+
+        s.query = "2fa code github".into();
+        let fx = reduce(&mut s, Action::QuerySubmitted);
+        assert_eq!(fx, vec![Effect::CallModule { module: "app-aegis".into(), action: "run".into(), payload: "code github".into() }]);
+
+        s.query = "vault list".into();
+        let fx = reduce(&mut s, Action::QuerySubmitted);
+        assert_eq!(fx, vec![Effect::CallModule { module: "app-vault".into(), action: "run".into(), payload: "list".into() }]);
+
+        s.query = "lsend recv 8080 tok!".into();
+        let fx = reduce(&mut s, Action::QuerySubmitted);
+        assert_eq!(fx, vec![Effect::CallModule { module: "app-localsend".into(), action: "run".into(), payload: "recv 8080 tok!".into() }]);
+
+        s.query = "wallpaper /sdcard/a.png".into();
+        assert_eq!(reduce(&mut s, Action::QuerySubmitted), vec![Effect::SetWallpaper("/sdcard/a.png".into())]);
+
+        s.query = "overlay".into();
+        assert_eq!(reduce(&mut s, Action::QuerySubmitted), vec![Effect::RequestOverlay]);
 
         s.query = "termin".into();
         let fx = reduce(&mut s, Action::QuerySubmitted);

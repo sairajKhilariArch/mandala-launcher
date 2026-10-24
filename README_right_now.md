@@ -23,11 +23,20 @@ mandala-launcher/
 │   ├── mandala-ui/               Slint files + render/apply_theme glue
 │   └── mandala-shell/            binary (desktop) / cdylib (Android)
 ├── modules/
-│   ├── app-notes/                A2  (example dynamic module)
-│   └── app-calculator/           C4  (example; talks to Notes over the IPC bus)
-├── tools/mandala-sign/           keygen / sign / verify / install
+│   ├── app-notes/                A2  notes (append-only text buffer)
+│   ├── app-calculator/           C4  calculator (logs results to Notes over the IPC bus)
+│   ├── app-terminal/             A1  sandboxed command shell (no process spawn)
+│   ├── app-aegis/                C1  TOTP 2FA, imports otpauth:// URIs
+│   ├── app-vault/                C2  Argon2id + XChaCha20-Poly1305 vault, KeePassDX CSV import
+│   └── app-localsend/            C3  token-guarded LAN file transfer
+├── tools/
+│   ├── mandala-sign/             keygen / sign / verify / install
+│   └── mandala-perf/             engine boot, RSS and reducer benchmarks
+├── android/AndroidManifest.xml   HOME-category activity + launcher permissions
 ├── themes/                       Minimalist OLED, Cel-Shaded, Retro Terminal
-└── scripts/dev-setup.sh          build + key + sign + install, one command
+└── scripts/
+    ├── dev-setup.sh              build + key + sign + install, one command
+    └── android-build.sh          cargo-ndk cross-build for aarch64 Android
 ```
 
 ## Quick start (desktop)
@@ -41,7 +50,20 @@ Try in the command bar: `= 2*(3+4)^2`, `= save 19.99*3` (result is appended to
 Notes through the ACL-checked bus), `note buy milk`, `calc` + Enter (fuzzy
 launch), `theme next`, `monitor`.
 
+Module command prefixes:
+
+| Command | Module | Examples |
+|---|---|---|
+| `> …` | A1 Terminal | `> ls`, `> write todo.txt buy milk`, `> cat todo.txt`, `> date`, `> history` |
+| `2fa …` | C1 2FA | `2fa`, `2fa add otpauth://totp/GitHub:me?secret=…`, `2fa code github` |
+| `vault …` | C2 Vault | `vault init <pass>`, `vault unlock <pass>`, `vault add bank me pw`, `vault import export.csv` |
+| `lsend …` | C3 LocalSend | `lsend recv 8080 token`, `lsend send /path/file 192.168.1.5:8080 token` |
+| `wallpaper <path>` | Android only | `wallpaper /sdcard/Pictures/bg.png` |
+| `overlay` | Android only | request the draw-over-other-apps permission |
+
 Run the tests: `cargo test --workspace`.
+Measure startup and memory: `cargo run --release -p mandala-perf`.
+Headless module check (CI): `target/release/mandala-shell --selftest`.
 
 ## How the design maps to code
 
@@ -55,6 +77,7 @@ Run the tests: `cargo test --workspace`.
 | 6. Signed dynamic loading | `loader.rs` (flow chart implemented, minus remote fetch, see below) |
 | 7. Responsive layout | `Responsive` global + `LayoutClass` (compact < 600, medium < 840, expanded: both drawers docked) |
 | 8. Theme engine | `theme.rs`, `themes/*.json`; user themes in `<home>/themes/*.json` |
+| 9. Roadmap phases | all five phases ticked in `docs/comprehensive_project_architecture_roadmap.md`; evidence in `docs/performance.md` and the test suite |
 
 ## Home directory layout
 
@@ -74,6 +97,18 @@ $MANDALA_HOME/
   library: once loaded it runs with the launcher's full privileges. The
   ACLs in `ipc_bus.rs` govern *message routing* between modules and the host;
   they are not memory or syscall isolation. Do not describe them as a sandbox.
+* **The terminal does not spawn processes.** `> …` is a small command set over
+  `<home>/data/app-terminal`; absolute paths, `..` and symlink escapes are
+  rejected. Handing input to `sh -c` would give the command bar host
+  privileges, so it is deliberately not implemented.
+* **Vault data at rest** is Argon2id-derived (m=19 MiB, t=2, p=1) and sealed
+  with XChaCha20-Poly1305; the passphrase is never stored. The passphrase is
+  typed into the command bar, so it is visible on screen while typing.
+* **2FA secrets** are base32 secrets in `<home>/data/app-aegis/accounts.json`
+  (mode 0600) and are *not* encrypted at rest. The device lock is the boundary.
+* **LocalSend** opens a TCP port only when the user runs `lsend recv`; the
+  shared token is required, files are capped at 64 MiB and verified with
+  SHA-256. Transfers are not encrypted in transit.
 * Pipeline: read bytes → SHA-256 → `verify_strict` Ed25519 over the digest →
   on failure the file is moved to `quarantine/`. The **verified bytes** are
   written to `runtime/<id>-<hash>.so` and *that* copy is loaded, so swapping the
@@ -111,38 +146,54 @@ Crate type `cdylib`; then
 ## Android
 
 The shell crate has an `android` feature and an `android_main` entry
-(`crates/mandala-shell/src/lib.rs`), built as `libmandala_shell.so`:
+(`crates/mandala-shell/src/lib.rs`), built as `libmandala_shell.so`. The
+whole pipeline (shell, all six modules, signing, staged home directory) is one
+script:
 
 ```bash
 cargo install cargo-ndk
-cargo ndk -t arm64-v8a build --release -p mandala-shell --lib --features android
+rustup target add aarch64-linux-android
+ANDROID_NDK_HOME=/path/to/ndk scripts/android-build.sh
 ```
 
-You still need to package it (e.g. with `cargo-apk`/`xbuild` or a Gradle
-shell), declare a HOME-category activity in the manifest, and sign module
-`.so` files for the Android ABI. The feature name `backend-android-activity-06`
-in `crates/mandala-shell/Cargo.toml` tracks Slint's Android backend, so adjust
-it if you pin a different Slint release.
+It stages `dist/android/{AndroidManifest.xml,jniLibs/arm64-v8a/,mandala-home/,themes/}`.
+Packaging into an APK still needs a Gradle module (or `cargo-apk`); the
+manifest is `android/AndroidManifest.xml` (NativeActivity, HOME + LAUNCHER
+categories, `SET_WALLPAPER`, `SYSTEM_ALERT_WINDOW`, `INTERNET`).
+
+The JNI bridge in `crates/mandala-shell/src/android.rs` sets the wallpaper
+(`WallpaperManager.setStream`) and opens the overlay permission dialog
+(`ACTION_MANAGE_OVERLAY_PERMISSION`). It is compiled only for Android targets
+and has not been smoke-tested on a device from this repository. The `android`
+feature name `backend-android-activity-06` tracks Slint's backend; adjust it
+if you pin a different Slint release.
 
 ## Status: what was and was not verified
 
-Built in an environment **without access to crates.io**, so `cargo build` /
-`cargo test` could not be run for the whole workspace. What *was* verified by
-compiling directly with `rustc`:
+Verified in this repository (Rust 1.98, Linux x86_64):
 
-* `gesture`, `slots`, `command`, `state`: 31 unit tests pass.
-* `app-calculator` (7 tests) and `app-notes` (6 tests) pass.
-* The real `declare_module!` output was compiled into `cdylib`s, `dlopen`ed,
-  and driven through the vtable (init, handle, free_string, and a calculator
-  `save` going out through the host callback to Notes).
+* `cargo build --workspace` succeeds, including the Slint build script.
+* `cargo test --workspace`: **109 tests pass** (55 core, 9 terminal, 9 2FA,
+  9 vault, 7 LocalSend, 7 calculator, 6 notes, 3 module API, 4 sign tool).
+* `scripts/dev-setup.sh` builds, keygens, signs and installs all six modules.
+* `mandala-shell --selftest` (headless) verifies + `dlopen`s every installed
+  module and calls its `launch` action through the host, so the signature and
+  ABI pipeline is exercised end to end.
+* The shell starts against a real display: `boot: interactive after 1.27 s,
+  process RSS 36.9 MiB` in a **debug** build on a loaded 4-core machine. See
+  `docs/performance.md` for the release numbers and why the 20 ms / 5 MB
+  design targets are not met by the GUI stack.
+* The LocalSend module is exercised over real loopback TCP in its tests
+  (handshake, token rejection, checksum rejection, file landed on disk).
 
-**Not yet compiled** (they need the external crates): `ipc_bus`, `crypto`,
-`loader`, `router`, `theme`, `mandala-sign` (serde, tokio, ed25519-dalek,
-libloading, sha2), the Slint files, and the shell. They were written
-carefully and include tests, but expect to fix a few compile errors on the
-first `cargo build`, most likely in the Slint files (property/callback syntax
-varies a little between Slint releases) or small API details. The first
-build also generates `Cargo.lock`.
+Not verified here:
+
+* **Android device run.** The `android` feature and `android.rs` JNI bridge are
+  type-checked for `aarch64-linux-android` when that target is installed, and
+  `scripts/android-build.sh` stages the APK inputs, but no NDK/device was
+  available and the overlay/wallpaper calls were never executed.
+* 2FA codes were validated against the RFC 6238 vectors, not against a live
+  authenticator app.
 
 ## Not implemented (deliberately out of scope)
 
@@ -150,9 +201,11 @@ build also generates `Cargo.lock`.
   loader reads local, signed files. Add a downloader that drops files into
   `modules/` and let the existing verification do the rest.
 * Android `.dex` classloading: modules are native shared objects.
-* The 13 other slot modules (terminal, chat, AI, weather, ...). Slots show
-  "not installed" until a signed module with the matching id is placed in
-  `modules/`.
+* The 8 remaining slot modules (chat, AI, weather, RSS, tasks, reader, gallery,
+  camera). Those slots show "not installed" until a signed module with the
+  matching id is placed in `modules/`.
+* KeePass **KDBX** parsing (CSV import only) and the real LocalSend wire
+  protocol; see the deviation table in the roadmap.
 * Gesture "pass through to OS": the classifier reports
   `SystemBackPassthrough` and the UI takes no action; real pass-through is
   the OS's job when the app does not consume edge events.

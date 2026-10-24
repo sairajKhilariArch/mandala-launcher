@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Mandala launcher manifest template.
+
+  Build the native library first (`scripts/android-build.sh`), then drop this
+  file and the generated `jniLibs/` into an Android Gradle project (or wrap it
+  with `cargo-apk`). `android.app.lib_name` must match the cdylib produced by
+  the `mandala-shell` package: `libmandala_shell.so` -> `mandala_shell`.
+
+  Permissions:
+    SET_WALLPAPER        `wallpaper <path>` command (JNI WallpaperManager)
+    SYSTEM_ALERT_WINDOW  overlay; requested at runtime by `overlay`
+    INTERNET             LAN sockets used by the LocalSend module
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="org.mandala.launcher">
+
+    <uses-permission android:name="android.permission.SET_WALLPAPER" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <application
+        android:label="Mandala"
+        android:hasCode="false"
+        android:allowBackup="false"
+        android:theme="@android:style/Theme.NoTitleBar.Fullscreen">
+
+        <activity
+            android:name="android.app.NativeActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:screenOrientation="portrait"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode|density">
+            <meta-data android:name="android.app.lib_name" android:value="mandala_shell" />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+                <category android:name="android.intent.category.HOME" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

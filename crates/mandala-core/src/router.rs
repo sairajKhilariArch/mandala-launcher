@@ -49,3 +49,61 @@ where
         });
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::crypto::TrustStore;
+    use crate::ipc_bus::AccessControlList;
+    use crate::paths::HostPaths;
+
+    /// A host request for an uninstalled module comes back as an `error`
+    /// envelope instead of hanging or panicking.
+    #[tokio::test]
+    async fn uninstalled_module_reports_error_to_host() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = HostPaths::new(dir.path());
+        paths.ensure().unwrap();
+        let (broker, rx) = MicrokernelIpcBroker::new(8, AccessControlList::default_policy());
+        let broker = Arc::new(broker);
+        let host = Arc::new(ModuleHost::new(paths, TrustStore::default(), broker.clone()));
+
+        let (tx, mut seen) = tokio::sync::mpsc::unbounded_channel();
+        tokio::spawn(run_router(rx, broker.clone(), host, move |env| {
+            let _ = tx.send(env);
+        }));
+
+        broker.dispatch(broker.envelope(HOST, "app-notes", "launch", "")).await.unwrap();
+        let reply = seen.recv().await.expect("router must answer the host");
+        assert_eq!(reply.payload_action, "error");
+        assert_eq!(reply.target_module, HOST);
+        assert!(reply.data_json.contains("not installed"), "{}", reply.data_json);
+    }
+
+    /// A module-addressed request never replies to the sender (fire and
+    /// forget); a delivery failure still surfaces to the host as a notice.
+    #[tokio::test]
+    async fn module_failures_surface_as_host_notices() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = HostPaths::new(dir.path());
+        paths.ensure().unwrap();
+        let (broker, rx) = MicrokernelIpcBroker::new(8, AccessControlList::default_policy());
+        let broker = Arc::new(broker);
+        let host = Arc::new(ModuleHost::new(paths, TrustStore::default(), broker.clone()));
+
+        let (tx, mut seen) = tokio::sync::mpsc::unbounded_channel();
+        tokio::spawn(run_router(rx, broker.clone(), host, move |env| {
+            let _ = tx.send(env);
+        }));
+
+        // `app-calculator` is allowed to message `app-notes` by the ACL.
+        broker
+            .dispatch(broker.envelope("app-calculator", "app-notes", "launch", ""))
+            .await
+            .unwrap();
+        let notice = seen.recv().await.expect("module failure must surface as a notice");
+        assert_eq!(notice.sender_module, "app-notes");
+        assert_eq!(notice.target_module, HOST);
+        assert_eq!(notice.payload_action, "error");
+    }
+}

@@ -1,0 +1,15 @@
+[package]
+name = "mandala-perf"
+description = "Measures Mandala engine boot time, RSS and reducer throughput"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "mandala-perf"
+path = "src/main.rs"
+
+[dependencies]
+mandala-core = { workspace = true }
+tokio = { workspace = true }

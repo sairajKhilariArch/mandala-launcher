@@ -7,7 +7,12 @@ members = [
     "crates/mandala-shell",
     "modules/app-notes",
     "modules/app-calculator",
+    "modules/app-terminal",
+    "modules/app-aegis",
+    "modules/app-vault",
+    "modules/app-localsend",
     "tools/mandala-sign",
+    "tools/mandala-perf",
 ]
 
 [workspace.package]

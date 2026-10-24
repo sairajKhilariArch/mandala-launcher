@@ -33,7 +33,9 @@ cp -n themes/*.json "$HOME_DIR/themes/" 2>/dev/null || true
 
 echo "==> signing + installing modules into $HOME_DIR/modules"
 "$TARGET/mandala-sign" install --home "$HOME_DIR" --key "$KEY_DIR/host.key" \
-  "$TARGET/libapp_notes.$EXT" "$TARGET/libapp_calculator.$EXT"
+  "$TARGET/libapp_notes.$EXT" "$TARGET/libapp_calculator.$EXT" \
+  "$TARGET/libapp_terminal.$EXT" "$TARGET/libapp_aegis.$EXT" \
+  "$TARGET/libapp_vault.$EXT" "$TARGET/libapp_localsend.$EXT"
 
 cat <<EOF
 

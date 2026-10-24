@@ -28,7 +28,7 @@ Modern smartphone interfaces are engineered around engagement optimization—lev
 
 **Mandala Launcher (`mandala-shell`)** is a radical departure from commercial mobile launcher design. Built on a pure **Rust** backend and rendered with the **Slint UI** framework, Mandala transforms your home screen into a static, text-first, intent-driven canvas. 
 
-By applying **Fitts’s Law** to spatial ergonomics and decoupling application execution into a **hypervisor-style microkernel architecture**, Mandala provides a quiet, blazingly fast (< 5MB RAM footprint), and secure mobile workspace.
+By applying **Fitts’s Law** to spatial ergonomics and decoupling application execution into a **hypervisor-style microkernel architecture**, Mandala provides a quiet, fast and secure mobile workspace.
 
 ---
 
@@ -38,7 +38,7 @@ By applying **Fitts’s Law** to spatial ergonomics and decoupling application e
   * **Panel A (Center Anchor):** Text-first command terminal, search bar, and primary intent utilities.
   * **Panel B (Left Context Drawer):** Passive information retrieval (RSS, Weather, Tasks).
   * **Panel C (Right Utility Drawer):** Security tools, local syncing, and diagnostics (2FA, KeePass, LocalSend).
-* ⚡ **Rust + Slint Native Performance:** Zero garbage-collection stutters, instant cold boots (< 20ms), and minimal memory overhead (< 5MB RAM).
+* ⚡ **Rust + Slint Native Performance:** Zero garbage-collection stutters and native startup. Measured cold-boot and memory numbers — including the gap to the original 20 ms / 5 MB targets — are in [`docs/performance.md`](docs/performance.md).
 * 🛡️ **Microkernel IPC Bus:** Hypervisor-style Access Control Lists (ACL) enforce strict memory sandboxing between dynamic modules.
 * 🎨 **Dynamic Theme Engine:** Hot-swappable JSON design manifests supporting **Minimalist OLED**, **Cartoonish Cel-Shaded**, and **Retro Terminal** themes.
 * 🌿 **Monorepo & Submodule Integration:** Modular "branch-per-app" architecture powered by Git submodules for isolated feature testing and building.

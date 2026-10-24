@@ -9,7 +9,6 @@ use mandala_core::state::{reduce, Action, AppState, Effect};
 use mandala_core::theme::ThemeManager;
 use mandala_module_api::ModuleReply;
 use mandala_ui::MainWindow;
-use slint::ComponentHandle;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Instant;
 
@@ -97,6 +96,30 @@ impl App {
             Effect::RestartAll => {
                 let n = self.host.restart_all();
                 log::info!("restart: dropped {n} module(s), cleared quarantine verdicts");
+            }
+            Effect::SetWallpaper(path) => {
+                #[cfg(target_os = "android")]
+                let message = match crate::android::set_wallpaper(std::path::Path::new(&path)) {
+                    Ok(()) => "Wallpaper updated.".to_string(),
+                    Err(e) => format!("wallpaper: {e}"),
+                };
+                #[cfg(not(target_os = "android"))]
+                let message = {
+                    let _ = path;
+                    "wallpaper: Android only — on desktop the OS owns the background.".to_string()
+                };
+                self.dispatch(Action::Notice(message));
+            }
+            Effect::RequestOverlay => {
+                #[cfg(target_os = "android")]
+                let message = match crate::android::request_overlay_permission() {
+                    Ok(true) => "Overlay permission already granted.".to_string(),
+                    Ok(false) => "Overlay permission requested.".to_string(),
+                    Err(e) => format!("overlay: {e}"),
+                };
+                #[cfg(not(target_os = "android"))]
+                let message = "overlay: Android only — desktop window managers do not need it.".to_string();
+                self.dispatch(Action::Notice(message));
             }
             Effect::SetTheme(key) => {
                 let picked = lock(&self.themes).select(&key).map(|t| t.clone());

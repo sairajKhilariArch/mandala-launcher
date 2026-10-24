@@ -19,6 +19,11 @@ default = []
 # (adjust the Slint backend feature if you pin a different Slint release).
 android = ["slint/backend-android-activity-06"]
 
+[target.'cfg(target_os = "android")'.dependencies]
+# Java bridge for the system overlay permission and wallpaper (Phase 5).
+jni = "0.21"
+ndk-context = "0.1"
+
 [dependencies]
 mandala-core = { workspace = true }
 mandala-ui = { workspace = true }
