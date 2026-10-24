@@ -441,6 +441,15 @@ export component ScreenScaleEngine {
   - `modules/app-aegis`: RFC 6238 TOTP, imports Aegis/Google `otpauth://` URIs.
   - `modules/app-vault`: Argon2id + XChaCha20-Poly1305 store, imports the KeePassDX CSV export (KDBX is not parsed).
   - `modules/app-localsend`: token-guarded one-shot TCP transfer with SHA-256 verification (not the LocalSend wire protocol).
+- [x] Fill every remaining module slot (A4, A5, B1–B5, C5); all 14 module slots now have a signed `cdylib`.
+  - `modules/app-weather` (B1): current conditions from an endpoint **you** configure — no provider is bundled, the last observation is cached for offline use.
+  - `modules/app-rss` (B2): add/remove feeds, fetch, cached headlines and article text; publication order only, no ranking.
+  - `modules/app-tasks` (B3): tasks plus streak-based habits in one JSON file, no sync.
+  - `modules/app-reader` (B4): paginated plain-text/Markdown/source reader; paths inside the module dir cannot escape it.
+  - `modules/app-gallery` (B5): list-first image/video browser with header-probed dimensions; no decoding, no upload.
+  - `modules/app-chat` (A4): Matrix client-server API (login or token, rooms, read, say); `read`/`say` only, no E2EE key management.
+  - `modules/app-ai` (A5): OpenAI-compatible chat-completions client; the key is read from `MANDALA_AI_API_KEY` only and never written to disk by the module.
+  - `modules/app-camera` (C5): owns the capture directory and review; `camera` in the command bar fires `ACTION_IMAGE_CAPTURE` with the captures dir as `EXTRA_OUTPUT` (shell JNI, Android only).
 
 ### Phase 4: Theme Engine & Dynamic Token Injection
 - [x] Implement Serde JSON theme parser in Rust. (`core/theme.rs`)
@@ -465,7 +474,9 @@ Deliberate deviations from the text of this document:
 | Remote fetch from Git branches (Section 6) | Local signed files in `<home>/modules` | A downloader can drop files there; verification already handles the rest |
 | KeePassDX KDBX database | KeePassDX **CSV** import into the encrypted vault | KDBX needs a large format/crypto stack; CSV is the app's export path |
 | LocalSend wire protocol | Token-guarded direct TCP transfer with SHA-256 | Keeps the LAN-only / no-telemetry property without a multicast discovery stack |
-| 15 slot modules | 6 modules (`notes`, `calculator`, `terminal`, `aegis`, `vault`, `localsend`) + builtin search | Slots without a signed module report "not installed" by design |
+| 15 slot modules | 14 modules + builtin search (`app-drawer`) | Every module slot is implemented; a deployment without signed modules still reports "not installed" rather than failing |
+| Breezy Weather / Tasks.org / MJ PDF / Fossify bridges | Native modules that read the same data (`weather` endpoint, JSON task store, text reader, media listing) | The bridges named in §3 assume Android intents into those apps; the modules keep the same slots and capability without an app-to-app dependency |
+| PDF decoding in B4 | Plain-text/Markdown reader; `open x.pdf` says PDF is not decoded | A PDF text/image stack is a large dependency for one slot; the reader states its limit instead of failing silently |
 
 ---
 

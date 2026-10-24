@@ -1,0 +1,16 @@
+[package]
+name = "app-reader"
+description = "Mandala module B4: offline plain-text and markdown reader"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+mandala-module-api = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"

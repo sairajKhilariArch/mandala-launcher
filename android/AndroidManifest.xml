@@ -11,6 +11,12 @@
     SET_WALLPAPER        `wallpaper <path>` command (JNI WallpaperManager)
     SYSTEM_ALERT_WINDOW  overlay; requested at runtime by `overlay`
     INTERNET             LAN sockets used by the LocalSend module
+
+  The FileProvider entry makes `camera` able to hand the user's camera app a
+  `content://` URI for the full-size photo (C5). It needs `androidx.core` on
+  the Gradle classpath; without it the shell falls back to `file://`, which
+  Android rejects on API 24+ — the command then reports that plainly instead
+  of pretending the photo was saved. See android/res/xml/file_paths.xml.
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="org.mandala.launcher">
@@ -19,6 +25,9 @@
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- Capture uses the user's camera app, so a camera is not required. -->
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
 
     <application
         android:label="Mandala"
@@ -40,5 +49,15 @@
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 </manifest>

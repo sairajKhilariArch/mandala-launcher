@@ -64,7 +64,8 @@ jobs:
           cp "$REL/mandala-shell${{ matrix.exe }}" "$REL/mandala-sign${{ matrix.exe }}" "$D/"
           cp themes/*.json "$D/themes/"
           cp README.md "$D/"
-          for m in app_notes app_calculator app_terminal app_aegis app_vault app_localsend; do
+          for m in app_notes app_calculator app_terminal app_aegis app_vault app_localsend \
+                   app_weather app_rss app_tasks app_reader app_gallery app_chat app_ai app_camera; do
             cp "$REL/${{ matrix.prefix }}${m}.${{ matrix.ext }}" "$D/modules-unsigned/"
           done
 

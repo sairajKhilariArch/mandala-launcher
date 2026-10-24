@@ -35,8 +35,7 @@ impl App {
         rt: tokio::runtime::Handle,
         ui: slint::Weak<MainWindow>,
     ) -> Arc<Self> {
-        let mut state = AppState::default();
-        state.theme_id = themes.current().id.clone();
+        let state = AppState { theme_id: themes.current().id.clone(), ..AppState::default() };
         Arc::new(Self {
             state: Mutex::new(state),
             gestures: Mutex::new(GestureTracker::new(GestureConfig::default())),
@@ -121,8 +120,26 @@ impl App {
                 let message = "overlay: Android only — desktop window managers do not need it.".to_string();
                 self.dispatch(Action::Notice(message));
             }
+            Effect::Camera => {
+                #[cfg(target_os = "android")]
+                let message = {
+                    let dir = self.host.paths().data_dir("app-camera").join("captures");
+                    let file = dir.join(format!("IMG_{}.jpg", std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_secs())
+                        .unwrap_or(0)));
+                    let _ = std::fs::create_dir_all(&dir);
+                    match crate::android::capture(&file) {
+                        Ok(()) => format!("camera: opened — the photo is written to {}", file.display()),
+                        Err(e) => format!("camera: {e}"),
+                    }
+                };
+                #[cfg(not(target_os = "android"))]
+                let message = "camera: Android only — this build has no device camera.\n\nThe Camera slot still lists and inspects files you copy into\n<home>/data/app-camera/captures.".to_string();
+                self.dispatch(Action::Notice(message));
+            }
             Effect::SetTheme(key) => {
-                let picked = lock(&self.themes).select(&key).map(|t| t.clone());
+                let picked = lock(&self.themes).select(&key).cloned();
                 match picked {
                     Ok(theme) => {
                         let id = theme.id.clone();

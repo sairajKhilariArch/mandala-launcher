@@ -58,6 +58,14 @@ Module command prefixes:
 | `2fa …` | C1 2FA | `2fa`, `2fa add otpauth://totp/GitHub:me?secret=…`, `2fa code github` |
 | `vault …` | C2 Vault | `vault init <pass>`, `vault unlock <pass>`, `vault add bank me pw`, `vault import export.csv` |
 | `lsend …` | C3 LocalSend | `lsend recv 8080 token`, `lsend send /path/file 192.168.1.5:8080 token` |
+| `weather …` | B1 Weather | `weather set https://your-host/obs`, `weather city Berlin`, `weather` |
+| `rss …` | B2 RSS | `rss add https://example.org/feed.xml`, `rss fetch`, `rss headlines`, `rss read 2` |
+| `tasks …` | B3 Tasks | `tasks add ship the launcher`, `tasks habit stretch`, `tasks done 1`, `tasks clean` |
+| `doc …` | B4 Reader | `doc list`, `doc open README.md`, `doc next` |
+| `gallery …` | B5 Gallery | `gallery set /home/me/Pictures`, `gallery list`, `gallery info cat.jpg` |
+| `chat …` | A4 Chat | `chat token https://matrix.example.org me <token>`, `chat rooms`, `chat read 1`, `chat say 1 hello` |
+| `ai …` / `ask …` | A5 Assistant | `ai set http://127.0.0.1:8080/v1`, `ai model llama3`, `ask summarise this` |
+| `camera` | C5 Camera (Android) | fire the camera into `<home>/data/app-camera/captures`; `gallery set <that dir>` to browse |
 | `wallpaper <path>` | Android only | `wallpaper /sdcard/Pictures/bg.png` |
 | `overlay` | Android only | request the draw-over-other-apps permission |
 
@@ -162,11 +170,20 @@ manifest is `android/AndroidManifest.xml` (NativeActivity, HOME + LAUNCHER
 categories, `SET_WALLPAPER`, `SYSTEM_ALERT_WINDOW`, `INTERNET`).
 
 The JNI bridge in `crates/mandala-shell/src/android.rs` sets the wallpaper
-(`WallpaperManager.setStream`) and opens the overlay permission dialog
-(`ACTION_MANAGE_OVERLAY_PERMISSION`). It is compiled only for Android targets
-and has not been smoke-tested on a device from this repository. The `android`
-feature name `backend-android-activity-06` tracks Slint's backend; adjust it
-if you pin a different Slint release.
+(`WallpaperManager.setStream`), opens the overlay permission dialog
+(`ACTION_MANAGE_OVERLAY_PERMISSION`), and fires the camera intent
+(`ACTION_IMAGE_CAPTURE` with `EXTRA_OUTPUT`). It is compiled only for Android
+targets. The `android` feature name `backend-android-activity-06` tracks
+Slint's backend; adjust it if you pin a different Slint release.
+
+**Camera on Android needs a FileProvider.** The camera app runs in another
+process, so `EXTRA_OUTPUT` must be a `content://` URI. `android/AndroidManifest.xml`
+declares `androidx.core.content.FileProvider` at `${applicationId}.fileprovider`
+with paths from `android/res/xml/file_paths.xml`, which means the Gradle
+project must put `androidx.core:core-ktx` (or `androidx.core:core`) on the
+classpath. Without the provider the shell falls back to `Uri.fromFile`, which
+Android rejects on API 24+ — the command then reports the rejection instead of
+claiming the photo was saved.
 
 ## Status: what was and was not verified
 
@@ -204,9 +221,6 @@ Not verified here:
   loader reads local, signed files. Add a downloader that drops files into
   `modules/` and let the existing verification do the rest.
 * Android `.dex` classloading: modules are native shared objects.
-* The 8 remaining slot modules (chat, AI, weather, RSS, tasks, reader, gallery,
-  camera). Those slots show "not installed" until a signed module with the
-  matching id is placed in `modules/`.
 * KeePass **KDBX** parsing (CSV import only) and the real LocalSend wire
   protocol; see the deviation table in the roadmap.
 * Gesture "pass through to OS": the classifier reports

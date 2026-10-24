@@ -18,6 +18,9 @@ default = []
 # Build for Android: `cargo ndk -t arm64-v8a build --lib --features android`
 # (adjust the Slint backend feature if you pin a different Slint release).
 android = ["slint/backend-android-activity-06"]
+# Accessibility (accesskit + AT-SPI) costs ~300 ms of window creation on a
+# desktop with no accessibility bus; opt in explicitly for screen readers.
+a11y = ["slint/accessibility"]
 
 [target.'cfg(target_os = "android")'.dependencies]
 # Java bridge for the system overlay permission and wallpaper (Phase 5).
@@ -33,5 +36,14 @@ env_logger = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
 mandala-module-api = { workspace = true }
-# Default features = winit backend + FemtoVG GPU renderer for desktop dev.
-slint = { version = "1.9" }
+# Explicit slint features instead of the defaults: the default set also pulls
+# `accessibility` (accesskit), which activates AT-SPI over D-Bus during window
+# creation and accounted for most of the boot time on a desktop with no
+# accessibility bus running. `system-tray` is likewise unused by the launcher.
+# Re-enable with `--features a11y` when shipping to screen-reader users (see
+# docs/performance.md).
+slint = { version = "1.9", default-features = false, features = [
+    "backend-winit",
+    "renderer-femtovg",
+    "compat-1-2",
+] }

@@ -1,0 +1,19 @@
+[package]
+name = "app-weather"
+description = "Mandala module B1: user-configured, privacy-first weather endpoint client"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+mandala-module-api = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+ureq = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"

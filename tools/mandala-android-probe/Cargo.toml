@@ -1,0 +1,14 @@
+[package]
+name = "mandala-android-probe"
+description = "Headless module-pipeline probe for Android devices and emulators"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "mandala-android-probe"
+path = "src/main.rs"
+
+[dependencies]
+mandala-core = { workspace = true }

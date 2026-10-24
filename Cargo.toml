@@ -11,8 +11,17 @@ members = [
     "modules/app-aegis",
     "modules/app-vault",
     "modules/app-localsend",
+    "modules/app-tasks",
+    "modules/app-reader",
+    "modules/app-gallery",
+    "modules/app-rss",
+    "modules/app-weather",
+    "modules/app-chat",
+    "modules/app-ai",
+    "modules/app-camera",
     "tools/mandala-sign",
     "tools/mandala-perf",
+    "tools/mandala-android-probe",
 ]
 
 [workspace.package]
@@ -35,6 +44,8 @@ serde_json = "1"
 sha2 = "0.10"
 thiserror = "1"
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "macros", "time"] }
+ureq = "3"
+roxmltree = "0.20"
 
 mandala-module-api = { path = "crates/mandala-module-api" }
 mandala-core = { path = "crates/mandala-core" }

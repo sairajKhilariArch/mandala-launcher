@@ -21,8 +21,20 @@ use std::sync::Arc;
 
 /// Build every subsystem, show the window and block until it closes.
 pub fn run(paths: HostPaths) -> anyhow::Result<()> {
+    run_inner(paths, false)
+}
+
+/// Like [`run`], but quits once the first frame is interactive and logs the
+/// measured boot time + RSS. Used by `--boot-report` so the roadmap budget can
+/// be checked on any machine (and in CI) without a human closing a window.
+pub fn boot_report(paths: HostPaths) -> anyhow::Result<()> {
+    run_inner(paths, true)
+}
+
+fn run_inner(paths: HostPaths, exit_after_boot: bool) -> anyhow::Result<()> {
     let boot = std::time::Instant::now();
     paths.ensure().context("creating Mandala home directory")?;
+    let after_home = boot.elapsed();
 
     let trust = TrustStore::load_dir(&paths.trust_dir()).context("loading trusted keys")?;
     let no_keys = trust.is_empty();
@@ -30,22 +42,30 @@ pub fn run(paths: HostPaths) -> anyhow::Result<()> {
         log::warn!("no trusted public keys in {}: every module will be rejected", paths.trust_dir().display());
     }
 
+    let after_trust = boot.elapsed();
     let mut themes = ThemeManager::with_presets();
     for w in themes.load_user_dir(&paths.themes_dir()) {
         log::warn!("theme skipped: {w}");
     }
+    let after_themes = boot.elapsed();
 
+    // One worker drives the router task (it is single-threaded by design) and
+    // module calls go to the blocking pool via `spawn_blocking`. A second
+    // worker only added a stack + wakeups to boot and idle RSS.
     let runtime = tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(2)
+        .worker_threads(1)
         .enable_all()
         .build()
         .context("starting tokio runtime")?;
 
+    let after_runtime = boot.elapsed();
     let (broker, rx) = MicrokernelIpcBroker::new(64, AccessControlList::default_policy());
     let broker = Arc::new(broker);
     let host = Arc::new(ModuleHost::new(paths.clone(), trust, broker.clone()));
+    let after_host = boot.elapsed();
 
     let ui = MainWindow::new().context("creating window")?;
+    let after_window = boot.elapsed();
     mandala_ui::populate_slots(&ui);
 
     let app = App::new(broker.clone(), host.clone(), themes, runtime.handle().clone(), ui.as_weak());
@@ -100,13 +120,30 @@ pub fn run(paths: HostPaths) -> anyhow::Result<()> {
         ));
     }
 
+    let after_wiring = boot.elapsed();
+
     // Roadmap Phase 5 budget: report the real time to an interactive event
     // loop and the resident set, instead of asserting a target.
     slint::Timer::single_shot(std::time::Duration::ZERO, move || {
         let rss = mandala_core::sys::process_rss_kb()
             .map(|k| format!(", process RSS {k} KiB"))
             .unwrap_or_default();
-        log::info!("boot: interactive after {:.1} ms{rss}", boot.elapsed().as_secs_f64() * 1e3);
+        let ms = |d: std::time::Duration| d.as_secs_f64() * 1e3;
+        log::info!(
+            "boot: interactive after {:.1} ms{rss}\n  phases: home {:.1} · trust {:.1} · themes {:.1} · runtime {:.1} · host {:.1} · window {:.1} · wiring {:.1} · event-loop start {:.1} ms",
+            ms(boot.elapsed()),
+            ms(after_home),
+            ms(after_trust - after_home),
+            ms(after_themes - after_trust),
+            ms(after_runtime - after_themes),
+            ms(after_host - after_runtime),
+            ms(after_window - after_host),
+            ms(after_wiring - after_window),
+            ms(boot.elapsed() - after_wiring),
+        );
+        if exit_after_boot {
+            let _ = slint::quit_event_loop();
+        }
     });
 
     ui.run().context("running UI event loop")?;

@@ -81,6 +81,22 @@ pub enum Command {
     Wallpaper(String),
     /// `overlay` -> request the Android draw-over-other-apps permission.
     Overlay,
+    /// `weather Berlin` -> weather `run`.
+    Weather(String),
+    /// `rss fetch` -> RSS reader `run`.
+    Rss(String),
+    /// `tasks add ship it` -> task tracker `run`.
+    Tasks(String),
+    /// `doc open 2` -> document reader `run`.
+    Reader(String),
+    /// `gallery list` -> media gallery `run`.
+    Gallery(String),
+    /// `chat rooms` -> Matrix bridge `run`.
+    Chat(String),
+    /// `ai ask …` / `ask …` -> assistant `run`.
+    Ai(String),
+    /// `camera` -> fire the platform capture intent (Android).
+    Camera,
     /// Launch the slot with this id.
     Launch(&'static str),
     Empty,
@@ -116,6 +132,15 @@ pub fn parse_command(input: &str) -> Command {
         "lsend" | "localsend" => return Command::LocalSend(tail.to_string()),
         "wallpaper" | "wall" if !tail.is_empty() => return Command::Wallpaper(tail.to_string()),
         "overlay" => return Command::Overlay,
+        "weather" | "forecast" => return Command::Weather(tail.to_string()),
+        "rss" | "feeds" => return Command::Rss(tail.to_string()),
+        "tasks" | "task" | "habits" => return Command::Tasks(tail.to_string()),
+        "doc" | "reader" => return Command::Reader(tail.to_string()),
+        "gallery" | "media" => return Command::Gallery(tail.to_string()),
+        "chat" | "matrix" => return Command::Chat(tail.to_string()),
+        "ai" => return Command::Ai(tail.to_string()),
+        "ask" if !tail.is_empty() => return Command::Ai(format!("ask {tail}")),
+        "camera" | "shoot" => return Command::Camera,
         _ => {}
     }
     match search_slots(s, 1).first() {
@@ -168,6 +193,18 @@ mod tests {
         assert_eq!(parse_command("lsend recv 8080 tok!"), Command::LocalSend("recv 8080 tok!".into()));
         assert_eq!(parse_command("wallpaper /sdcard/a.png"), Command::Wallpaper("/sdcard/a.png".into()));
         assert_eq!(parse_command("overlay"), Command::Overlay);
+        assert_eq!(parse_command("weather Berlin"), Command::Weather("Berlin".into()));
+        assert_eq!(parse_command("rss fetch"), Command::Rss("fetch".into()));
+        assert_eq!(parse_command("tasks add call mom"), Command::Tasks("add call mom".into()));
+        assert_eq!(parse_command("doc open 2"), Command::Reader("open 2".into()));
+        assert_eq!(parse_command("gallery list"), Command::Gallery("list".into()));
+        assert_eq!(parse_command("chat rooms"), Command::Chat("rooms".into()));
+        assert_eq!(parse_command("ai status"), Command::Ai("status".into()));
+        assert_eq!(parse_command("ask summarise this"), Command::Ai("ask summarise this".into()));
+        assert_eq!(parse_command("camera"), Command::Camera);
+        // Bare words still fall through to slot search.
+        assert!(matches!(parse_command("ask"), Command::NoMatch(_) | Command::Launch(_)));
+        assert!(matches!(parse_command("cameraa"), Command::NoMatch(_) | Command::Launch(_)));
         // Bare `wall` still falls through to fuzzy search (no slot matched here).
         assert!(matches!(parse_command("wall"), Command::NoMatch(_) | Command::Launch(_)));
         // Ordinary fuzzy search is unaffected.

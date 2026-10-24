@@ -59,7 +59,7 @@ impl Default for AppState {
     }
 }
 
-pub const HOME_HINT: &str = "Type to search apps.\n= 2+2   calculate\nnote ...   quick note\n> ls   terminal\n2fa   authenticator\nvault   passwords\nlsend   local transfer\ntheme next   switch theme\nmonitor   module processes";
+pub const HOME_HINT: &str = "Type to search apps.\n= 2+2   calculate\nnote ...   quick note\n> ls   terminal\nask ...   assistant\nweather Berlin   forecast\nrss headlines   feeds\ntasks   habits\nchat   Matrix\ncamera   capture\n2fa   authenticator\nvault   passwords\nlsend   local transfer\ntheme next   switch theme\nmonitor   module processes";
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Action {
@@ -93,6 +93,8 @@ pub enum Effect {
     SetWallpaper(String),
     /// Android-only: ask for the draw-over-other-apps permission.
     RequestOverlay,
+    /// Android-only: fire the camera intent into the C5 captures directory.
+    Camera,
 }
 
 pub fn reduce(state: &mut AppState, action: Action) -> Vec<Effect> {
@@ -206,6 +208,39 @@ pub fn reduce(state: &mut AppState, action: Action) -> Vec<Effect> {
                     fx.push(Effect::SetWallpaper(path));
                 }
                 Command::Overlay => fx.push(Effect::RequestOverlay),
+                Command::Weather(cmd) => {
+                    state.active_module = Some("app-weather".into());
+                    fx.push(Effect::CallModule { module: "app-weather".into(), action: "run".into(), payload: cmd });
+                }
+                Command::Rss(cmd) => {
+                    state.active_module = Some("app-rss".into());
+                    fx.push(Effect::CallModule { module: "app-rss".into(), action: "run".into(), payload: cmd });
+                }
+                Command::Tasks(cmd) => {
+                    state.active_module = Some("app-tasks".into());
+                    fx.push(Effect::CallModule { module: "app-tasks".into(), action: "run".into(), payload: cmd });
+                }
+                Command::Reader(cmd) => {
+                    state.active_module = Some("app-reader".into());
+                    fx.push(Effect::CallModule { module: "app-reader".into(), action: "run".into(), payload: cmd });
+                }
+                Command::Gallery(cmd) => {
+                    state.active_module = Some("app-gallery".into());
+                    fx.push(Effect::CallModule { module: "app-gallery".into(), action: "run".into(), payload: cmd });
+                }
+                Command::Chat(cmd) => {
+                    state.active_module = Some("app-chat".into());
+                    fx.push(Effect::CallModule { module: "app-chat".into(), action: "run".into(), payload: cmd });
+                }
+                Command::Ai(cmd) => {
+                    state.active_module = Some("app-ai".into());
+                    fx.push(Effect::CallModule { module: "app-ai".into(), action: "run".into(), payload: cmd });
+                }
+                Command::Camera => {
+                    state.active_module = None;
+                    state.canvas_text = "Opening the camera...".into();
+                    fx.push(Effect::Camera);
+                }
                 Command::Theme(key) => fx.push(Effect::SetTheme(key)),
                 Command::Monitor => {
                     state.monitor_open = true;
@@ -392,6 +427,39 @@ mod tests {
 
         s.query = "overlay".into();
         assert_eq!(reduce(&mut s, Action::QuerySubmitted), vec![Effect::RequestOverlay]);
+
+        s.query = "weather Berlin".into();
+        let fx = reduce(&mut s, Action::QuerySubmitted);
+        assert_eq!(fx, vec![Effect::CallModule { module: "app-weather".into(), action: "run".into(), payload: "Berlin".into() }]);
+        assert_eq!(s.active_module.as_deref(), Some("app-weather"));
+
+        s.query = "rss headlines".into();
+        let fx = reduce(&mut s, Action::QuerySubmitted);
+        assert_eq!(fx, vec![Effect::CallModule { module: "app-rss".into(), action: "run".into(), payload: "headlines".into() }]);
+
+        s.query = "tasks add call mom".into();
+        let fx = reduce(&mut s, Action::QuerySubmitted);
+        assert_eq!(fx, vec![Effect::CallModule { module: "app-tasks".into(), action: "run".into(), payload: "add call mom".into() }]);
+
+        s.query = "doc open 2".into();
+        let fx = reduce(&mut s, Action::QuerySubmitted);
+        assert_eq!(fx, vec![Effect::CallModule { module: "app-reader".into(), action: "run".into(), payload: "open 2".into() }]);
+
+        s.query = "gallery list".into();
+        let fx = reduce(&mut s, Action::QuerySubmitted);
+        assert_eq!(fx, vec![Effect::CallModule { module: "app-gallery".into(), action: "run".into(), payload: "list".into() }]);
+
+        s.query = "chat rooms".into();
+        let fx = reduce(&mut s, Action::QuerySubmitted);
+        assert_eq!(fx, vec![Effect::CallModule { module: "app-chat".into(), action: "run".into(), payload: "rooms".into() }]);
+
+        s.query = "ask explain tls".into();
+        let fx = reduce(&mut s, Action::QuerySubmitted);
+        assert_eq!(fx, vec![Effect::CallModule { module: "app-ai".into(), action: "run".into(), payload: "ask explain tls".into() }]);
+
+        s.query = "camera".into();
+        assert_eq!(reduce(&mut s, Action::QuerySubmitted), vec![Effect::Camera]);
+        assert!(s.canvas_text.contains("camera"));
 
         s.query = "termin".into();
         let fx = reduce(&mut s, Action::QuerySubmitted);
