@@ -7,24 +7,20 @@ on:
   pull_request:
     branches: [ "main" ]
 
-env:
-  CARGO_TERM_COLOR: always
-
 jobs:
   build:
     runs-on: ubuntu-latest
-    
-    # Add these steps at the top of the job
+
     steps:
     - uses: actions/checkout@v4
-    
+
     - name: Install system dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y libfontconfig1 libfontconfig1-dev
-    
+        sudo apt-get install -y libfontconfig1-dev
+
     - name: Build
       run: cargo build --verbose
-    
+
     - name: Run tests
       run: cargo test --verbose
