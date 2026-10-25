@@ -4,9 +4,13 @@
 //! * **Local-first** — nothing runs until you ask; no background calls, no
 //!   telemetry, no vendor SDK. The endpoint is configurable (your own llama.cpp
 //!   server, an internal gateway, or a hosted API you have already agreed to).
-//! * **Key never in config** — the API key is read from the `MANDALA_AI_API_KEY`
-//!   environment variable only, never written to disk by this module, never
-//!   logged. Config on disk holds just `base_url`, `model` and `system`.
+//! * **Key stays private** — the API key comes from the `MANDALA_AI_API_KEY`
+//!   environment variable where one exists (Linux/macOS/Windows), or from
+//!   `key <value>` on Android, where an installed app cannot inherit an
+//!   exported variable from anyone's shell. The key is stored in
+//!   `<data_dir>/key` (0600, app-private), is never echoed back, never logged
+//!   and never written into `config.json`. Config on disk holds just
+//!   `base_url`, `model` and `system`.
 //! * **Streaming is out of scope** for the command bar; each question is one
 //!   request/response, capped in size and time.
 //!
@@ -80,16 +84,67 @@ impl Ai {
         write_private(&path, serde_json::to_string_pretty(&self.cfg).map_err(|e| e.to_string())?.as_bytes()).map_err(|e| e.to_string())
     }
 
+    fn key_path(&self) -> Result<PathBuf, String> {
+        let config = self.config_path()?;
+        config
+            .parent()
+            .map(|dir| dir.join("key"))
+            .ok_or_else(|| "assistant storage not initialised".to_string())
+    }
+
     fn api_key(&self) -> Result<String, String> {
         if let Some(k) = &self.key_override {
             return Ok(k.clone());
         }
         match std::env::var(KEY_ENV) {
-            Ok(k) if !k.trim().is_empty() => Ok(k.trim().to_string()),
+            Ok(k) if !k.trim().is_empty() => return Ok(k.trim().to_string()),
+            _ => {}
+        }
+        match self.key_path().and_then(|p| {
+            std::fs::read_to_string(&p)
+                .map(|s| s.trim().to_string())
+                .map_err(|e| e.to_string())
+        }) {
+            Ok(k) if !k.is_empty() => Ok(k),
             _ => Err(format!(
-                "no API key found.\n\nExport one before starting the launcher:\n  export {KEY_ENV}=sk-...\n\nIt is read from the environment only — never stored in config,\nnever logged. Point at your own endpoint with `set <base-url>`."
+                "no API key found.\n\nEither export one before starting the launcher:\n  export {KEY_ENV}=sk-...\nor set one from the command bar (this is what Android does — an installed app\ncannot inherit a shell variable):\n  key sk-...\n\nThe key is stored 0600 in the module's private directory, never logged and\nnever put in config. Point at your own endpoint with `set <base-url>`."
             )),
         }
+    }
+
+    fn key_state(&self) -> String {
+        if self.key_override.is_some() {
+            "present (injected)".to_string()
+        } else if std::env::var(KEY_ENV).map(|k| !k.trim().is_empty()).unwrap_or(false) {
+            "present (env)".to_string()
+        } else if self.key_path().map(|p| p.exists()).unwrap_or(false) {
+            "present (key file)".to_string()
+        } else {
+            "MISSING — export MANDALA_AI_API_KEY or run `key <value>`".to_string()
+        }
+    }
+
+    /// `key <value>` persists a key Android can actually deliver;
+    /// `key clear` removes it. The value is never echoed in any reply.
+    fn set_key(&mut self, value: &str) -> Result<String, String> {
+        let path = self.key_path()?;
+        if value == "clear" || value == "-" {
+            if path.exists() {
+                std::fs::remove_file(&path).map_err(|e| e.to_string())?;
+            }
+            return Ok("key cleared.".into());
+        }
+        if value.is_empty() {
+            return Err("usage: key <value>   (or `key clear`)".into());
+        }
+        if value.len() > 512 || value.chars().any(|c| c.is_whitespace()) {
+            return Err("key looks wrong (no spaces, < 512 chars)".into());
+        }
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        write_private(&path, value.as_bytes()).map_err(|e| e.to_string())?;
+        Ok("key saved (0600, private directory). It is never shown again;\nUse `key clear` to remove it.".into())
     }
 
     fn set_base(&mut self, url: &str) -> Result<String, String> {
@@ -170,14 +225,7 @@ impl Ai {
     }
 
     fn status(&self) -> String {
-        let key_state = if self.key_override.is_some() {
-            "present (injected)".to_string()
-        } else {
-            match std::env::var(KEY_ENV) {
-                Ok(k) if !k.trim().is_empty() => "present (env only)".to_string(),
-                _ => "MISSING — export MANDALA_AI_API_KEY".to_string(),
-            }
-        };
+        let key_state = self.key_state();
         format!("base   {}\nmodel  {}\nkey    {}\nsystem {}\nhistory {} turns", self.cfg.base_url, self.cfg.model, key_state, clip(&self.cfg.system, 40), self.history.len())
     }
 
@@ -204,6 +252,8 @@ impl Ai {
             "set" => self.set_base(rest),
             "model" => self.set_model(rest),
             "system" => self.set_system(rest),
+            "key" if rest.is_empty() => Ok(self.key_state()),
+            "key" => self.set_key(rest),
             "clear" => {
                 self.history.clear();
                 Ok("conversation cleared.".into())
@@ -231,11 +281,14 @@ const HELP: &str = "ASSISTANT
   model <name>          model name the endpoint serves
   system <instruction>  optional persona / rules
   ask <question>        one-shot question (keeps short context)
+  key <value>           store an API key (0600, private; `key clear` removes)
   clear                 forget the conversation
   status                configuration and key state
 
-The key comes from the MANDALA_AI_API_KEY environment variable only — it is
-never written to disk or logged. Nothing is sent until you ask.";
+The key comes from the MANDALA_AI_API_KEY environment variable, or from
+`key <value>` where there is no shell to export one (Android). It is never
+echoed, never logged and never written into config. Nothing is sent until you
+ask.";
 
 fn clip(s: &str, max: usize) -> String {
     if s.chars().count() <= max {
@@ -439,6 +492,39 @@ mod tests {
         assert!(out.text.contains(KEY_ENV), "must name the env var: {}", out.text);
         let status = a.execute("status").text;
         assert!(status.contains("MISSING"), "{status}");
+    }
+
+    #[test]
+    fn key_command_supplies_a_key_where_env_cannot() {
+        // Android: an installed app inherits no shell variable, so `key` is the
+        // only usable route. It must persist 0600 and never echo the value.
+        std::env::remove_var(KEY_ENV);
+        let (dir, mut a) = ready();
+        assert!(a.execute("status").text.contains("MISSING"));
+        assert!(a.execute("key").ok, "bare `key` reports state");
+
+        let out = a.execute("key sk-android-123");
+        assert!(out.ok, "{}", out.text);
+        assert!(!out.text.contains("sk-android-123"), "the key must never be echoed: {}", out.text);
+        let path = dir.path().join("key");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(std::fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600);
+        }
+        assert!(a.execute("status").text.contains("present (key file)"), "{}", a.execute("status").text);
+
+        // A restart reloads it — the value lives on disk, not in the process.
+        let mut second = Ai::new();
+        second
+            .init(&ModuleContext { data_dir: dir.path().to_string_lossy().into(), host: Host::detached("app-ai") })
+            .unwrap();
+        assert_eq!(second.api_key().unwrap(), "sk-android-123");
+
+        assert!(!a.execute("key sk-bad key").ok, "whitespace rejected");
+        assert!(a.execute("key clear").text.contains("cleared"));
+        assert!(!path.exists(), "clear removes the file");
+        assert!(a.execute("status").text.contains("MISSING"));
     }
 
     #[test]

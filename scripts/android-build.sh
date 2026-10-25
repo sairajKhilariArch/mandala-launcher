@@ -117,9 +117,21 @@ cat <<EOF
 Staged $OUT/.
 
 Next steps (Android SDK required, not automated here):
-  1. Put AndroidManifest.xml + jniLibs/ into a Gradle module (or use cargo-apk)
-     and build the APK; the activity is android.app.NativeActivity with
-     android.app.lib_name=mandala_shell.
+  1. Build the APK. cargo-apk2 packages the shell directly from the metadata in
+     crates/mandala-shell/Cargo.toml (activity = android.app.NativeActivity,
+     lib_name = mandala_shell) and needs a JDK 17 and a release keystore:
+
+       cargo install cargo-apk2 --version 1.5.0
+       export ANDROID_HOME ANDROID_NDK_HOME
+       CARGO_APK_RELEASE_KEYSTORE=dev-keys/release.jks \
+       CARGO_APK_RELEASE_KEYSTORE_PASSWORD=... \
+         cargo apk2 build --release --features android \
+           --target aarch64-linux-android -p mandala-shell
+       # -> target/release/apk/mandala.apk
+
+     Alternatively drop AndroidManifest.xml + jniLibs/ into a Gradle module;
+     that path also provides androidx.core, which camera capture needs for its
+     FileProvider content:// URI.
   2. Install and push the module tree:
        adb push $OUT/mandala-home /sdcard/Android/data/org.mandala.launcher/files
      (or wherever the app's internal_data_path resolves).

@@ -155,8 +155,8 @@ Crate type `cdylib`; then
 
 The shell crate has an `android` feature and an `android_main` entry
 (`crates/mandala-shell/src/lib.rs`), built as `libmandala_shell.so`. The
-whole pipeline (shell, all six modules, signing, staged home directory) is one
-script:
+whole pipeline (shell, all fourteen modules, signing, staged home directory)
+is one script:
 
 ```bash
 cargo install cargo-ndk
@@ -165,9 +165,31 @@ ANDROID_NDK_HOME=/path/to/ndk scripts/android-build.sh
 ```
 
 It stages `dist/android/{AndroidManifest.xml,jniLibs/arm64-v8a/,mandala-home/,themes/}`.
-Packaging into an APK still needs a Gradle module (or `cargo-apk`); the
-manifest is `android/AndroidManifest.xml` (NativeActivity, HOME + LAUNCHER
-categories, `SET_WALLPAPER`, `SYSTEM_ALERT_WINDOW`, `INTERNET`).
+
+**Packaging the APK** is `cargo apk2` (the Slint-maintained fork of `cargo-apk`;
+plain `cargo-apk` has no 0.22 release and does not understand newer SDK
+layouts). Its manifest comes from `[package.metadata.android]` in
+`crates/mandala-shell/Cargo.toml` — the NativeActivity, `android.app.lib_name`,
+HOME + LAUNCHER filters and the `SET_WALLPAPER` / `SYSTEM_ALERT_WINDOW` /
+`INTERNET` permissions live there, so keep it in step with
+`android/AndroidManifest.xml` (the Gradle-path template):
+
+```bash
+cargo install cargo-apk2 --version 1.5.0       # needs a JDK 17: d8 in
+                                               # build-tools rejects newer class files
+export ANDROID_HOME ANDROID_NDK_HOME
+CARGO_APK_RELEASE_KEYSTORE=/path/release.jks \
+CARGO_APK_RELEASE_KEYSTORE_PASSWORD=... \
+  cargo apk2 build --release --features android \
+    --target aarch64-linux-android -p mandala-shell
+# -> target/release/apk/mandala.apk  (verify: apksigner verify --print-certs)
+```
+
+A release-profile build refuses to package without a keystore (only `dev`
+auto-generates one), which is why CI takes `MANDALA_ANDROID_KEYSTORE` /
+`MANDALA_ANDROID_KEYSTORE_PASSWORD` secrets and otherwise signs with a
+throwaway key it prints a warning about. The Gradle path remains available and
+is the one that puts `androidx.core` on the classpath for the FileProvider.
 
 The JNI bridge in `crates/mandala-shell/src/android.rs` sets the wallpaper
 (`WallpaperManager.setStream`), opens the overlay permission dialog

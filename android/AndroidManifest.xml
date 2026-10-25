@@ -50,9 +50,14 @@
             </intent-filter>
         </activity>
 
+        <!-- Literal authority, not ${applicationId}: only the Gradle plugin
+             substitutes that placeholder, so any packaging path without Gradle
+             (aapt2 directly) would ship the literal string and the runtime
+             authority lookup (getPackageName() + ".fileprovider") would miss.
+             The application id equals the package here, so both paths agree. -->
         <provider
             android:name="androidx.core.content.FileProvider"
-            android:authorities="${applicationId}.fileprovider"
+            android:authorities="org.mandala.launcher.fileprovider"
             android:exported="false"
             android:grantUriPermissions="true">
             <meta-data

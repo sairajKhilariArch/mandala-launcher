@@ -11,7 +11,7 @@ Modern mobile operating systems are engineered around engagement optimization, u
 Built on **Rust** and **Slint**, this architecture introduces:
 
 1. **Fitts's Law-Compliant Ergonomics:** Spatial partitioning based on physical thumb zones and intentional versus impulsive cognitive states.
-2. **Hypervisor-Style Host IPC:** Microkernel-level sandboxing between decoupled application modules via strict Access Control Lists (ACLs).
+2. **Hypervisor-Style Host IPC:** Every decoupled application module call is mediated by strict Access Control Lists (ACLs) in the host broker, and only Ed25519-signed modules load. The modules are `dlopen`ed into the host process, so the ACL is a reference monitor, not an OS-level memory/syscall sandbox.
 3. **Dynamic Module Lifecycle:** A Git-backed modular plugin architecture pulling pre-compiled binaries on demand without host re-compilation.
 4. **Adaptive Multi-Display Engine:** Dynamic layout scaling across single-screen phones, foldables, tri-folds, and large-format displays.
 5. **Declarative Theme Engine:** Reactive visual skinning supporting Minimalist OLED, Cel-Shaded Cartoonish, Retro Terminal, and User-Defined JSON Themes.

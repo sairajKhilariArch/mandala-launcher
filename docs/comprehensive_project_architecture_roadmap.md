@@ -31,7 +31,7 @@ Commercial smartphone operating systems are designed around variable reward sche
 * **Anti-Dopamine UX:** Elimination of unread badge counters, dynamic splash screens, and algorithmic feeds.
 * **Low-Latency Cold Boots:** Native Rust initialization launching to interactive state in **$< 20\text{ ms}$**.
 * **Minimal Memory Footprint:** Total resident set size (RSS) memory footprint maintained at **$< 5\text{ MB}$** on idle.
-* **Microkernel Security:** Hardware-isolated module sandboxing through host-mediated Access Control Lists (ACLs) and Ed25519 signature validation.
+* **Microkernel Security:** Host-mediated Access Control Lists (ACLs) on every module call, plus Ed25519 signature validation of the module itself. Modules run in the host process, so this is isolation of *capabilities*, not of memory or syscalls (see §5).
 
 ---
 
@@ -157,7 +157,7 @@ The launcher arranges 15 core utilities across 3 panels (5 slots per panel) mapp
 
 ## 5. Microkernel IPC Bus & Security Architecture
 
-Sub-modules execute inside memory sandboxes. Modules cannot interact directly or request system resources without passing through the Host IPC Broker.
+Sub-modules are loaded into the host process with `libloading` (`dlopen`); they share one address space. What the broker enforces is *capability* isolation: a module cannot call another module or the host except by sending an envelope through the Host IPC Broker, where an Access Control List decides whether that sender may invoke that target/action, and only libraries whose Ed25519 signature verifies against an installed trust key are loaded at all. A hostile module that is signed and permitted is still ordinary in-process code — process-per-module isolation with seccomp/rlimits would be a separate design (see `README_right_now.md`).
 
 ```
 +---------------------+                           +---------------------+

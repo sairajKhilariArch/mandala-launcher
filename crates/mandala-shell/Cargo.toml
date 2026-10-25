@@ -13,6 +13,64 @@ crate-type = ["lib", "cdylib"] # cdylib is the Android entry (libmandala_shell.s
 name = "mandala-shell"
 path = "src/main.rs"
 
+# `cargo apk2 build --release --features android` packages the cdylib above into
+# an APK. (cargo-apk/cargo-apk2, not Gradle: there is no Java/Kotlin code to
+# compile and no AndroidX on the classpath.) android/AndroidManifest.xml is the
+# equivalent template for the Gradle path in scripts/android-build.sh; keep the
+# two in sync when adding permissions or activities.
+[package.metadata.android]
+package = "org.mandala.launcher"
+apk_name = "mandala"
+build_targets = ["aarch64-linux-android"]
+use_aapt2 = true
+# Paths here are relative to this Cargo.toml, not the workspace root.
+resources = "../../android/res"
+
+[package.metadata.android.sdk]
+min_sdk_version = 26
+target_sdk_version = 35
+
+[[package.metadata.android.uses_permission]]
+name = "android.permission.SET_WALLPAPER"
+
+[[package.metadata.android.uses_permission]]
+name = "android.permission.SYSTEM_ALERT_WINDOW"
+
+[[package.metadata.android.uses_permission]]
+name = "android.permission.INTERNET"
+
+[[package.metadata.android.uses_permission]]
+name = "android.permission.ACCESS_NETWORK_STATE"
+
+[[package.metadata.android.uses_feature]]
+name = "android.hardware.camera"
+required = false
+
+[package.metadata.android.application]
+label = "Mandala"
+theme = "@android:style/Theme.NoTitleBar.Fullscreen"
+
+# One NativeActivity: HOME + LAUNCHER so the launcher can be chosen as the home
+# screen, `singleTask` so returning home does not stack instances.
+[[package.metadata.android.application.activity]]
+name = "android.app.NativeActivity"
+exported = true
+launch_mode = "singleTask"
+orientation = "portrait"
+config_changes = "orientation|screenSize|screenLayout|keyboardHidden|uiMode|density"
+
+[[package.metadata.android.application.activity.meta_data]]
+name = "android.app.lib_name"
+value = "mandala_shell"
+
+[[package.metadata.android.application.activity.intent_filter]]
+actions = ["android.intent.action.MAIN"]
+categories = [
+    "android.intent.category.LAUNCHER",
+    "android.intent.category.HOME",
+    "android.intent.category.DEFAULT",
+]
+
 [features]
 default = []
 # Build for Android: `cargo ndk -t arm64-v8a build --lib --features android`

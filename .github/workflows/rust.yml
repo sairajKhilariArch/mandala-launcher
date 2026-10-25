@@ -1,3 +1,8 @@
+name: Rust
+
+# Build and test on every supported desktop OS: the release workflow used to be
+# the only place the Windows/macOS suites ran, so a platform-only failure was
+# discovered after the tag was already pushed.
 env:
   CARGO_TERM_COLOR: always
 
@@ -6,21 +11,36 @@ on:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
+  workflow_dispatch:
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  test:
+    name: Test ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
 
     steps:
     - uses: actions/checkout@v4
 
-    - name: Install system dependencies
+    - name: Install Linux GUI build dependencies
+      if: runner.os == 'Linux'
       run: |
         sudo apt-get update
-        sudo apt-get install -y libfontconfig1-dev
+        sudo apt-get install -y --no-install-recommends \
+          libfontconfig1-dev libxkbcommon-dev libxkbcommon-x11-dev \
+          libwayland-dev libx11-dev libxcb1-dev libgl1-mesa-dev libegl1-mesa-dev
+
+    - uses: dtolnay/rust-toolchain@stable
+    - uses: Swatinem/rust-cache@v2
 
     - name: Build
-      run: cargo build --verbose
+      run: cargo build --verbose --workspace
 
     - name: Run tests
-      run: cargo test --verbose
+      run: cargo test --verbose --workspace

@@ -521,9 +521,40 @@ mod tests {
     use mandala_module_api::Host;
     use std::io::{Read, Write};
     use std::net::TcpListener;
-    use std::sync::atomic::{AtomicUsize, Ordering};
 
-    static REQUESTS: AtomicUsize = AtomicUsize::new(0);
+    /// Read one request: first the header block, then exactly `Content-Length`
+    /// bytes of body.
+    ///
+    /// Answering as soon as `\r\n\r\n` arrives is what broke the Windows CI
+    /// job: winsock delivers the body in a separate segment, so the client was
+    /// still writing when the server closed the socket (ECONNRESET). Linux and
+    /// macOS usually coalesce headers and body into one read, which hid it.
+    fn read_request(sock: &mut std::net::TcpStream) -> Vec<u8> {
+        let mut buf = Vec::new();
+        let mut chunk = [0u8; 512];
+        let mut body_start = None;
+        while body_start.is_none() {
+            match sock.read(&mut chunk) {
+                Ok(0) | Err(_) => return buf,
+                Ok(n) => buf.extend_from_slice(&chunk[..n]),
+            }
+            body_start = buf.windows(4).position(|w| w == b"\r\n\r\n").map(|i| i + 4);
+        }
+        let body_start = body_start.unwrap();
+        let head = String::from_utf8_lossy(&buf[..body_start]).to_ascii_lowercase();
+        let len = head
+            .lines()
+            .find_map(|line| line.strip_prefix("content-length:"))
+            .and_then(|value| value.trim().parse::<usize>().ok())
+            .unwrap_or(0);
+        while buf.len() < body_start + len {
+            match sock.read(&mut chunk) {
+                Ok(0) | Err(_) => break,
+                Ok(n) => buf.extend_from_slice(&chunk[..n]),
+            }
+        }
+        buf
+    }
 
     fn ready() -> (tempfile::TempDir, Chat) {
         let dir = tempfile::tempdir().unwrap();
@@ -539,30 +570,25 @@ mod tests {
     }
 
     /// A scripted homeserver: each request consumes the next canned response
-    /// from `bodies`. The token must match `expect_token` when set.
-    fn serve(bodies: Vec<String>) -> (u16, std::sync::Arc<std::sync::Mutex<Vec<String>>>) {
+    /// from `bodies`. Received request bodies are kept in `requests` so a test
+    /// can prove the upload actually arrived.
+    struct Server {
+        port: u16,
+        requests: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
+    }
+
+    fn serve(bodies: Vec<String>) -> Server {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let port = listener.local_addr().unwrap().port();
         let shared = std::sync::Arc::new(std::sync::Mutex::new(bodies));
+        let requests = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
         let sink = shared.clone();
+        let seen = requests.clone();
         std::thread::spawn(move || {
             for _ in 0..64 {
                 if let Ok((mut sock, _)) = listener.accept() {
-                    REQUESTS.fetch_add(1, Ordering::SeqCst);
-                    let mut buf = vec![0u8; 8192];
-                    let mut read = 0usize;
-                    loop {
-                        match sock.read(&mut buf[read..]) {
-                            Ok(0) => break,
-                            Ok(n) => {
-                                read += n;
-                                if buf[..read].windows(4).any(|w| w == b"\r\n\r\n") || read >= buf.len() {
-                                    break;
-                                }
-                            }
-                            Err(_) => break,
-                        }
-                    }
+                    let request = read_request(&mut sock);
+                    seen.lock().unwrap().push(String::from_utf8_lossy(&request).into_owned());
                     let body = sink.lock().unwrap().pop().unwrap_or_else(|| "{}".into());
                     let response = format!(
                         "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
@@ -573,7 +599,7 @@ mod tests {
                 }
             }
         });
-        (port, shared)
+        Server { port, requests }
     }
 
     fn login_direct(c: &mut Chat, hs: &str) {
@@ -630,9 +656,14 @@ mod tests {
     #[test]
     fn login_saves_a_0600_session_and_reloads() {
         let (dir, mut c) = ready();
-        let (port, _q) = serve(vec![r#"{"user_id":"@ada:example.org","access_token":"tok123","device_id":"DEV"}"#.into()]);
-        let out = ok(&mut c, &format!("login http://127.0.0.1:{port} ada hunter2"));
+        let server = serve(vec![r#"{"user_id":"@ada:example.org","access_token":"tok123","device_id":"DEV"}"#.into()]);
+        let out = ok(&mut c, &format!("login http://127.0.0.1:{} ada hunter2", server.port));
         assert!(out.contains("@ada:example.org"), "{out}");
+        assert!(
+            server.requests.lock().unwrap().iter().any(|r| r.contains("hunter2")),
+            "the POST body must reach the server: {:?}",
+            server.requests.lock().unwrap()
+        );
 
         let raw = std::fs::read_to_string(dir.path().join("session.json")).unwrap();
         assert!(raw.contains("tok123"));
@@ -657,8 +688,8 @@ mod tests {
     #[test]
     fn bad_login_is_rejected_without_saving() {
         let (dir, mut c) = ready();
-        let (port, _q) = serve(vec![r#"{"errcode":"M_FORBIDDEN","error":"Bad password"}"#.into()]);
-        let out = c.execute(&format!("login http://127.0.0.1:{port} ada wrong-password"));
+        let server = serve(vec![r#"{"errcode":"M_FORBIDDEN","error":"Bad password"}"#.into()]);
+        let out = c.execute(&format!("login http://127.0.0.1:{} ada wrong-password", server.port));
         assert!(!out.ok, "{}", out.text);
         assert!(!dir.path().join("session.json").exists(), "failed login must not persist a token");
     }
@@ -674,12 +705,12 @@ mod tests {
           {"type":"m.room.message","sender":"@ada:example.org","content":{"msgtype":"m.text","body":"nice!"}},
           {"type":"m.room.message","sender":"@ada:example.org","content":{"msgtype":"m.image","body":"photo.jpg"}}]}"#;
         // Responses are popped in reverse order of arrival.
-        let (port, _q) = serve(vec![
+        let server = serve(vec![
             r#"{"event_id":"$txn1"}"#.into(),
             messages.into(),
             sync.into(),
         ]);
-        login_direct(&mut c, &format!("http://127.0.0.1:{port}"));
+        login_direct(&mut c, &format!("http://127.0.0.1:{}", server.port));
 
         let rooms = ok(&mut c, "rooms");
         assert!(rooms.contains("Team") && rooms.contains("deploy done"), "{rooms}");
@@ -692,6 +723,11 @@ mod tests {
 
         let sent = ok(&mut c, "say 1 ship it");
         assert!(sent.contains("ship it"), "{sent}");
+        assert!(
+            server.requests.lock().unwrap().iter().any(|r| r.contains("ship it")),
+            "the message body must reach the server: {:?}",
+            server.requests.lock().unwrap()
+        );
         assert!(!c.execute("say 1").ok, "empty message rejected");
         assert!(!c.execute("say 9 hi").ok, "unknown room rejected");
     }
