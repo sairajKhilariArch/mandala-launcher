@@ -11,7 +11,9 @@
 //! * [`theme`]    – JSON theme manifests and presets
 //! * [`paths`]    – on-disk layout
 //! * [`sys`]      – process RSS introspection (performance budget)
+//! * [`catalog`]  – module store registry format and validation
 
+pub mod catalog;
 pub mod command;
 pub mod crypto;
 pub mod error;

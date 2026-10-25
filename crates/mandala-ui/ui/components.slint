@@ -6,6 +6,18 @@ export struct SlotItem {
     label: string,
 }
 
+// One row of the module-store overlay. `status` is pre-rendered by the
+// reducer (INSTALL / UPDATE / INSTALLED ✓ / INSTALLING…); `actionable` says
+// whether tapping it starts an install.
+export struct StoreItem {
+    id: string,
+    label: string,
+    description: string,
+    version: string,
+    status: string,
+    actionable: bool,
+}
+
 // Compact square-ish button used by the bottom dock (Panel A).
 export component SlotButton inherits Rectangle {
     in property <string> tag;

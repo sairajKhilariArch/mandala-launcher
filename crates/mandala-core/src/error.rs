@@ -25,6 +25,9 @@ pub enum MandalaError {
     #[error("crypto error: {0}")]
     Crypto(String),
 
+    #[error("store error: {0}")]
+    Store(String),
+
     #[error("I/O error on {path}: {source}")]
     Io {
         path: String,

@@ -49,11 +49,10 @@ jobs:
 
       - name: Package
         env:
-          # Optional: sign the example modules in CI. Secret = hex Ed25519
-          # secret key from `mandala-sign keygen`; variable = matching hex
-          # public key. Without them modules are shipped unsigned.
+          # Required: hex Ed25519 secret key matching the release public key
+          # committed at crates/mandala-shell/release.pub (the key the launcher
+          # bakes in). Modules are never published unsigned.
           SIGNING_KEY: ${{ secrets.MANDALA_SIGNING_KEY }}
-          PUBLIC_KEY: ${{ vars.MANDALA_PUBLIC_KEY }}
         run: |
           set -euo pipefail
           VERSION="${GITHUB_REF_NAME:-dev}"
@@ -69,20 +68,29 @@ jobs:
             cp "$REL/${{ matrix.prefix }}${m}.${{ matrix.ext }}" "$D/modules-unsigned/"
           done
 
-          if [ -n "${SIGNING_KEY:-}" ] && [ -n "${PUBLIC_KEY:-}" ]; then
-            umask 077
-            printf '%s\n' "$SIGNING_KEY" > "$RUNNER_TEMP/host.key"
-            mkdir -p "$D/mandala-home/trust"
-            printf '%s\n' "$PUBLIC_KEY" > "$D/mandala-home/trust/host.pub"
-            "$REL/mandala-sign${{ matrix.exe }}" install \
-              --home "$D/mandala-home" --key "$RUNNER_TEMP/host.key" \
-              "$D"/modules-unsigned/*
-            rm -f "$RUNNER_TEMP/host.key"
-            rm -rf "$D/modules-unsigned"
-            echo "Modules signed."
-          else
-            echo "::warning::MANDALA_SIGNING_KEY / MANDALA_PUBLIC_KEY not set: shipping unsigned modules."
+          if [ -z "${SIGNING_KEY:-}" ]; then
+            echo "::error::MANDALA_SIGNING_KEY is not set — refusing to publish unsigned modules (see docs/module-store.md)."
+            exit 1
           fi
+          umask 077
+          printf '%s\n' "$SIGNING_KEY" > "$RUNNER_TEMP/host.key"
+          mkdir -p "$D/mandala-home/trust"
+          # The trusted key is the one committed in-tree, so a wrong secret
+          # cannot ship modules this launcher would reject.
+          cp crates/mandala-shell/release.pub "$D/mandala-home/trust/host.pub"
+          "$REL/mandala-sign${{ matrix.exe }}" install \
+            --home "$D/mandala-home" --key "$RUNNER_TEMP/host.key" \
+            "$D"/modules-unsigned/*
+          # Prove the secret really matches the committed key: a mismatch
+          # would ship modules every launcher rejects.
+          for f in "$D"/mandala-home/modules/*; do
+            case "$f" in *.sig) continue ;; esac
+            "$REL/mandala-sign${{ matrix.exe }}" verify \
+              --pub crates/mandala-shell/release.pub "$f"
+          done
+          rm -f "$RUNNER_TEMP/host.key"
+          rm -rf "$D/modules-unsigned"
+          echo "Modules signed and verified against release.pub."
 
           cd dist
           if [ "${{ runner.os }}" = "Windows" ]; then
@@ -186,42 +194,11 @@ jobs:
           cp "$APK" "dist/mandala-${VERSION}-android-arm64.apk"
           BUILD_TOOLS="$(ls -d "$ANDROID_HOME"'/build-tools/'* | sort -V | tail -1)"
           "$BUILD_TOOLS/apksigner" verify --print-certs "dist/mandala-${VERSION}-android-arm64.apk"
-      - name: Build and sign the slot modules for the device
-        env:
-          SIGNING_KEY: ${{ secrets.MANDALA_SIGNING_KEY }}
-          PUBLIC_KEY: ${{ vars.MANDALA_PUBLIC_KEY }}
-        run: |
-          set -euo pipefail
-          VERSION="${GITHUB_REF_NAME:-dev}"
-          cargo ndk -t arm64-v8a build --release --lib \
-            -p app-notes -p app-calculator -p app-terminal -p app-aegis \
-            -p app-vault -p app-localsend -p app-weather -p app-rss \
-            -p app-tasks -p app-reader -p app-gallery -p app-chat \
-            -p app-ai -p app-camera
-          cargo build --release -p mandala-sign
-          D="dist/mandala-${VERSION}-android-arm64-modules"
-          mkdir -p "$D/modules-unsigned"
-          cp target/aarch64-linux-android/release/libapp_*.so "$D/modules-unsigned/"
-          if [ -n "${SIGNING_KEY:-}" ] && [ -n "${PUBLIC_KEY:-}" ]; then
-            umask 077
-            printf '%s\n' "$SIGNING_KEY" > "$RUNNER_TEMP/host.key"
-            mkdir -p "$D/mandala-home/trust"
-            printf '%s\n' "$PUBLIC_KEY" > "$D/mandala-home/trust/host.pub"
-            target/release/mandala-sign install --home "$D/mandala-home" \
-              --key "$RUNNER_TEMP/host.key" "$D"/modules-unsigned/*
-            rm -f "$RUNNER_TEMP/host.key"
-            rm -rf "$D/modules-unsigned"
-            echo "Modules signed."
-          else
-            echo "::warning::MANDALA_SIGNING_KEY / MANDALA_PUBLIC_KEY not set: shipping unsigned modules."
-          fi
-          tar czf "dist/$(basename "$D").tar.gz" -C dist "$(basename "$D")"
-          rm -rf "$D"
       - name: Checksums
         run: |
           set -euo pipefail
           cd dist
-          for f in *.apk *.tar.gz; do sha256sum "$f" > "$f.sha256"; done
+          for f in *.apk; do sha256sum "$f" > "$f.sha256"; done
           cat ./*.sha256
       - uses: actions/upload-artifact@v4
         with:

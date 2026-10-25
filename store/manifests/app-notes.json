@@ -1,0 +1,5 @@
+{
+  "id": "app-notes",
+  "label": "Notes",
+  "description": "Fast local notes. `note ...` appends from the command bar; calculator results can be piped in."
+}

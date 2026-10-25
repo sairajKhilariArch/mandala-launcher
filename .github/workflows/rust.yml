@@ -183,10 +183,9 @@ jobs:
           test -x "$BUILD_TOOLS/apksigner"
           "$BUILD_TOOLS/apksigner" verify --print-certs dist/*.apk
 
-      - name: Build Android module libraries
-        env:
-          SIGNING_KEY: ${{ secrets.MANDALA_SIGNING_KEY }}
-          PUBLIC_KEY: ${{ vars.MANDALA_PUBLIC_KEY }}
+      # Modules ship through .github/workflows/module.yml (signed, on the
+      # `store` branch); this job only proves they still cross-compile.
+      - name: Verify modules cross-compile for Android
         run: |
           set -euo pipefail
           cargo ndk -t arm64-v8a build --release --lib \
@@ -194,19 +193,12 @@ jobs:
             -p app-vault -p app-localsend -p app-weather -p app-rss \
             -p app-tasks -p app-reader -p app-gallery -p app-chat \
             -p app-ai -p app-camera
-          cargo build --release -p mandala-sign
-          VERSION="ci-${GITHUB_SHA::12}"
-          D="dist/mandala-${VERSION}-android-arm64-modules"
-          mkdir -p "$D/modules"
-          cp target/aarch64-linux-android/release/libapp_*.so "$D/modules/"
-          tar czf "dist/mandala-${VERSION}-android-arm64-modules.tar.gz" -C dist "$(basename "$D")"
-          rm -rf "$D"
 
       - name: Generate SHA-256 checksums
         run: |
           set -euo pipefail
           cd dist
-          for f in *.apk *.tar.gz; do sha256sum "$f" > "$f.sha256"; done
+          for f in *.apk; do sha256sum "$f" > "$f.sha256"; done
           cat ./*.sha256
 
       - uses: actions/upload-artifact@v4

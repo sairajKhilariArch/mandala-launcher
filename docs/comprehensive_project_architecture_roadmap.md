@@ -471,10 +471,10 @@ Deliberate deviations from the text of this document:
 | Design text | Shipped behaviour | Why |
 |---|---|---|
 | `DexClassLoader` / `.dex` modules (Section 4) | Native `cdylib` modules loaded with `libloading` on every platform | One ABI, one loader, one signature pipeline; the in-process trust model is identical |
-| Remote fetch from Git branches (Section 6) | Local signed files in `<home>/modules` | A downloader can drop files there; verification already handles the rest |
+| Remote fetch from Git branches (Section 6) | HTTPS module store: `module.yml` publishes signed binaries + a registry to the `store` branch (GitHub Pages); the in-app store downloads, verifies and installs them | One transport (HTTPS + catalog) instead of cloning Git on device; the loader's signature check is unchanged and re-runs on every load. See `docs/module-store.md` |
 | KeePassDX KDBX database | KeePassDX **CSV** import into the encrypted vault | KDBX needs a large format/crypto stack; CSV is the app's export path |
 | LocalSend wire protocol | Token-guarded direct TCP transfer with SHA-256 | Keeps the LAN-only / no-telemetry property without a multicast discovery stack |
-| 15 slot modules | 14 modules + builtin search (`app-drawer`) | Every module slot is implemented; a deployment without signed modules still reports "not installed" rather than failing |
+| 15 slot modules | 14 modules + builtin search (`app-drawer`), installed from the store at runtime | Every module slot is implemented; a deployment without signed modules reports "not installed" and offers the store rather than failing |
 | Breezy Weather / Tasks.org / MJ PDF / Fossify bridges | Native modules that read the same data (`weather` endpoint, JSON task store, text reader, media listing) | The bridges named in §3 assume Android intents into those apps; the modules keep the same slots and capability without an app-to-app dependency |
 | PDF decoding in B4 | Plain-text/Markdown reader; `open x.pdf` says PDF is not decoded | A PDF text/image stack is a large dependency for one slot; the reader states its limit instead of failing silently |
 

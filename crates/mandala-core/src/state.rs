@@ -4,7 +4,7 @@
 //! `AppState`, user input becomes `Action`s, and side effects are returned as
 //! data (`Effect`) for the shell to execute. Nothing here touches I/O.
 
-use crate::command::{parse_command, search_slots, Command};
+use crate::command::{fuzzy_score, parse_command, search_slots, Command};
 use crate::gesture::Gesture;
 use crate::slots::{self, SlotKind, SLOTS};
 
@@ -30,6 +30,44 @@ impl LayoutClass {
     }
 }
 
+/// One row of the Store overlay. Status is computed by the shell (it has to
+/// hash the installed file against the catalog) and lives here purely for
+/// rendering.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StoreRow {
+    pub id: String,
+    pub label: String,
+    pub description: String,
+    pub version: String,
+    pub status: StoreStatus,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StoreStatus {
+    NotInstalled,
+    Installed,
+    /// On disk but differing from the catalog: an update is available.
+    Update,
+    Installing,
+}
+
+impl StoreStatus {
+    /// Text shown on the right-hand button of a Store row.
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::NotInstalled => "INSTALL",
+            Self::Installed => "INSTALLED ✓",
+            Self::Update => "UPDATE",
+            Self::Installing => "INSTALLING…",
+        }
+    }
+
+    /// Whether tapping the row starts an install (exactly one in flight).
+    pub fn actionable(self) -> bool {
+        matches!(self, Self::NotInstalled | Self::Update)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct AppState {
     pub layout: LayoutClass,
@@ -40,6 +78,11 @@ pub struct AppState {
     pub canvas_text: String,
     pub query: String,
     pub monitor_text: String,
+    pub store_open: bool,
+    pub store_rows: Vec<StoreRow>,
+    /// Status line of the Store overlay: loading, offline note, or the last
+    /// install result (failures are prefixed with `! `).
+    pub store_status: String,
     pub theme_id: String,
 }
 
@@ -54,12 +97,15 @@ impl Default for AppState {
             canvas_text: HOME_HINT.to_string(),
             query: String::new(),
             monitor_text: String::new(),
+            store_open: false,
+            store_rows: Vec::new(),
+            store_status: String::new(),
             theme_id: String::new(),
         }
     }
 }
 
-pub const HOME_HINT: &str = "Type to search apps.\n= 2+2   calculate\nnote ...   quick note\n> ls   terminal\nask ...   assistant\nweather Berlin   forecast\nrss headlines   feeds\ntasks   habits\nchat   Matrix\ncamera   capture\n2fa   authenticator\nvault   passwords\nlsend   local transfer\ntheme next   switch theme\nmonitor   module processes";
+pub const HOME_HINT: &str = "Type to search apps.\n= 2+2   calculate\nnote ...   quick note\n> ls   terminal\nask ...   assistant\nweather Berlin   forecast\nrss headlines   feeds\ntasks   habits\nchat   Matrix\ncamera   capture\n2fa   authenticator\nvault   passwords\nlsend   local transfer\ntheme next   switch theme\nmonitor   module processes\nstore   browse & install modules";
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Action {
@@ -89,6 +135,25 @@ pub enum Action {
     /// User pressed a button on the process monitor.
     MonitorUnloadAll,
     MonitorRestartAll,
+    /// The Store overlay was opened (`store` command or Refresh).
+    StoreOpen,
+    /// A freshly fetched (or cached) catalog arrived; rows carry the
+    /// per-module install status computed by the shell.
+    StoreCatalog {
+        rows: Vec<StoreRow>,
+        /// Extra status line: the offline-cache note, `None` when live.
+        note: Option<String>,
+    },
+    StoreCatalogError(String),
+    /// User tapped Install/Update on a Store row.
+    StoreInstall(String),
+    /// The install effect finished; rows are recomputed from disk so this
+    /// state never has to duplicate install logic.
+    StoreInstallDone {
+        ok: bool,
+        msg: String,
+        rows: Vec<StoreRow>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -108,6 +173,13 @@ pub enum Effect {
     RequestOverlay,
     /// Android-only: fire the camera intent into the C5 captures directory.
     Camera,
+    /// Download + validate the store catalog (blocking; the shell runs it
+    /// off the UI thread and reports back with `StoreCatalog*`).
+    FetchCatalog,
+    /// Download, verify and install one catalog entry (blocking).
+    InstallModule {
+        id: String,
+    },
 }
 
 pub fn reduce(state: &mut AppState, action: Action) -> Vec<Effect> {
@@ -152,6 +224,7 @@ pub fn reduce(state: &mut AppState, action: Action) -> Vec<Effect> {
             state.left_open = false;
             state.right_open = false;
             state.monitor_open = false;
+            state.store_open = false;
         }
 
         Action::OpenSlot(id) => {
@@ -316,9 +389,11 @@ pub fn reduce(state: &mut AppState, action: Action) -> Vec<Effect> {
                 }
                 Command::Theme(key) => fx.push(Effect::SetTheme(key)),
                 Command::Monitor => {
+                    state.store_open = false;
                     state.monitor_open = true;
                     fx.push(Effect::RefreshMonitor);
                 }
+                Command::Store => return reduce(state, Action::StoreOpen),
                 Command::Launch(id) => return reduce(state, Action::OpenSlot(id.to_string())),
                 Command::NoMatch(q) => state.canvas_text = format!("No app matches `{q}`."),
             }
@@ -359,25 +434,72 @@ pub fn reduce(state: &mut AppState, action: Action) -> Vec<Effect> {
             fx.push(Effect::RestartAll);
             fx.push(Effect::RefreshMonitor);
         }
+
+        Action::StoreOpen => {
+            // One full-screen overlay at a time: the monitor closes, the
+            // store opens, and the fetch runs off-thread via the effect.
+            state.monitor_open = false;
+            state.store_open = true;
+            state.store_status = "loading catalog…".into();
+            fx.push(Effect::FetchCatalog);
+        }
+
+        Action::StoreCatalog { rows, note } => {
+            let installed = rows
+                .iter()
+                .filter(|r| r.status == StoreStatus::Installed)
+                .count();
+            // A blank header after a successful refresh looks like a failure;
+            // say what the catalog contains instead.
+            state.store_status =
+                note.unwrap_or_else(|| format!("{} available · {installed} installed", rows.len()));
+            state.store_rows = rows;
+        }
+
+        Action::StoreCatalogError(msg) => {
+            state.store_status = format!("! {msg}");
+        }
+
+        Action::StoreInstall(id) => {
+            if let Some(row) = state.store_rows.iter_mut().find(|r| r.id == id) {
+                // Guard against a double-tap starting a second download of
+                // the same module while one is already running.
+                if row.status.actionable() {
+                    row.status = StoreStatus::Installing;
+                    state.store_status = format!("installing {id}…");
+                    fx.push(Effect::InstallModule { id });
+                }
+            }
+        }
+
+        Action::StoreInstallDone { ok, msg, rows } => {
+            state.store_rows = rows;
+            state.store_status = if ok { msg } else { format!("! {msg}") };
+        }
     }
     fx
 }
 
-/// Text listing for the All-Apps drawer / live search results.
+/// Text listing for the All-Apps drawer / live search results. The Store is
+/// a host feature, not a slot, so it is spliced in alongside the matrix.
 pub fn describe_all_apps(query: &str) -> String {
-    let rows: Vec<String> = if query.trim().is_empty() {
+    let q = query.trim();
+    let mut rows: Vec<String> = if q.is_empty() {
         SLOTS
             .iter()
             .map(|s| format!("{}  {}", s.tag(), s.label))
             .collect()
     } else {
-        search_slots(query, 8)
+        search_slots(q, 8)
             .iter()
             .map(|s| format!("{}  {}", s.tag(), s.label))
             .collect()
     };
+    if q.is_empty() || fuzzy_score(q, "Store").is_some() {
+        rows.insert(0, "S  Store".into());
+    }
     if rows.is_empty() {
-        format!("No app matches `{}`.", query.trim())
+        format!("No app matches `{q}`.")
     } else {
         rows.join("\n")
     }
@@ -722,5 +844,134 @@ mod tests {
             reduce(&mut s, Action::MonitorRestartAll),
             vec![Effect::RestartAll, Effect::RefreshMonitor]
         );
+    }
+
+    fn store_row(status: StoreStatus) -> StoreRow {
+        StoreRow {
+            id: "app-notes".into(),
+            label: "Notes".into(),
+            description: "Local notes.".into(),
+            version: "1.0.0".into(),
+            status,
+        }
+    }
+
+    #[test]
+    fn store_opens_fetches_and_installs() {
+        let mut s = st();
+        s.query = "store".into();
+        assert_eq!(
+            reduce(&mut s, Action::QuerySubmitted),
+            vec![Effect::FetchCatalog]
+        );
+        assert!(s.store_open && !s.monitor_open);
+        assert_eq!(s.store_status, "loading catalog…");
+
+        let rows = vec![store_row(StoreStatus::NotInstalled)];
+        reduce(
+            &mut s,
+            Action::StoreCatalog {
+                rows: rows.clone(),
+                note: None,
+            },
+        );
+        assert_eq!(s.store_rows, rows);
+        assert_eq!(s.store_status, "1 available · 0 installed");
+
+        assert_eq!(
+            reduce(&mut s, Action::StoreInstall("app-notes".into())),
+            vec![Effect::InstallModule {
+                id: "app-notes".into()
+            }]
+        );
+        assert_eq!(s.store_rows[0].status, StoreStatus::Installing);
+
+        // A second tap while the download runs must not start it twice.
+        assert!(reduce(&mut s, Action::StoreInstall("app-notes".into())).is_empty());
+
+        let mut installed = rows.clone();
+        installed[0].status = StoreStatus::Installed;
+        reduce(
+            &mut s,
+            Action::StoreInstallDone {
+                ok: true,
+                msg: "app-notes installed".into(),
+                rows: installed.clone(),
+            },
+        );
+        assert_eq!(s.store_rows, installed);
+        assert_eq!(s.store_status, "app-notes installed");
+
+        reduce(&mut s, Action::CloseOverlays);
+        assert!(!s.store_open);
+    }
+
+    #[test]
+    fn failed_install_keeps_previous_rows() {
+        let mut s = st();
+        let rows = vec![store_row(StoreStatus::Update)];
+        reduce(
+            &mut s,
+            Action::StoreCatalog {
+                rows: rows.clone(),
+                note: Some("offline — cached catalog".into()),
+            },
+        );
+        assert_eq!(s.store_status, "offline — cached catalog");
+
+        reduce(&mut s, Action::StoreInstall("app-notes".into()));
+        reduce(
+            &mut s,
+            Action::StoreInstallDone {
+                ok: false,
+                msg: "signature does not match".into(),
+                rows: rows.clone(),
+            },
+        );
+        assert_eq!(s.store_rows, rows);
+        assert_eq!(s.store_status, "! signature does not match");
+
+        // Unknown ids are inert, and an installed row cannot be re-installed.
+        assert!(reduce(&mut s, Action::StoreInstall("app-nope".into())).is_empty());
+        let mut done = rows.clone();
+        done[0].status = StoreStatus::Installed;
+        reduce(
+            &mut s,
+            Action::StoreInstallDone {
+                ok: true,
+                msg: "ok".into(),
+                rows: done,
+            },
+        );
+        assert!(reduce(&mut s, Action::StoreInstall("app-notes".into())).is_empty());
+    }
+
+    #[test]
+    fn store_and_monitor_are_exclusive_overlays() {
+        let mut s = st();
+        reduce(&mut s, Action::StoreOpen);
+        assert!(s.store_open && !s.monitor_open);
+
+        s.query = "monitor".into();
+        reduce(&mut s, Action::QuerySubmitted);
+        assert!(s.monitor_open && !s.store_open);
+
+        s.query = "store".into();
+        reduce(&mut s, Action::QuerySubmitted);
+        assert!(s.store_open && !s.monitor_open);
+
+        // A catalog error is a status line, not an overlay close.
+        reduce(&mut s, Action::StoreCatalogError("fetch failed".into()));
+        assert_eq!(s.store_status, "! fetch failed");
+        assert!(s.store_open);
+    }
+
+    #[test]
+    fn all_apps_lists_the_store() {
+        let listing = describe_all_apps("");
+        assert!(listing.starts_with("S  Store"), "{listing}");
+        assert!(listing.contains("A1  Terminal") && listing.contains("C5  Camera"));
+        assert!(describe_all_apps("store").contains("S  Store"));
+        assert!(!describe_all_apps("zzzqqq").contains("S  Store"));
     }
 }

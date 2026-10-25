@@ -1,0 +1,5 @@
+{
+  "id": "app-terminal",
+  "label": "Terminal",
+  "description": "Sandboxed command shell over the module's private files: ls, cat, write, append, wc, history. Never spawns processes."
+}

@@ -1,0 +1,5 @@
+{
+  "id": "app-reader",
+  "label": "Doc Reader",
+  "description": "Read text and Markdown documents from app-private storage with remembered progress."
+}

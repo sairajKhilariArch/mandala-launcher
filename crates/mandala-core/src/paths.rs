@@ -52,6 +52,13 @@ impl HostPaths {
         self.root.join("quarantine")
     }
 
+    /// Store cache and install staging (`data/.store`). Module ids can never
+    /// start with a dot (`validate_module_id`), so this cannot collide with a
+    /// module's private data dir.
+    pub fn store_dir(&self) -> PathBuf {
+        self.root.join("data").join(".store")
+    }
+
     pub fn module_file(&self, id: &str) -> PathBuf {
         self.modules_dir()
             .join(format!("{id}.{}", std::env::consts::DLL_EXTENSION))

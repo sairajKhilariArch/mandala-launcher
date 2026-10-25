@@ -37,6 +37,21 @@ pub fn render(ui: &MainWindow, st: &AppState) {
     ui.set_left_open(st.left_open);
     ui.set_right_open(st.right_open);
     ui.set_monitor_open(st.monitor_open);
+    ui.set_store_open(st.store_open);
+    ui.set_store_status(SharedString::from(st.store_status.as_str()));
+    let rows: Vec<StoreItem> = st
+        .store_rows
+        .iter()
+        .map(|r| StoreItem {
+            id: r.id.as_str().into(),
+            label: r.label.as_str().into(),
+            description: r.description.as_str().into(),
+            version: r.version.as_str().into(),
+            status: r.status.label().into(),
+            actionable: r.status.actionable(),
+        })
+        .collect();
+    ui.set_store_rows(ModelRc::new(VecModel::from(rows)));
     // Only touch the input when the state diverged (e.g. cleared on submit);
     // rewriting identical text would disturb the cursor while typing.
     if ui.get_query().as_str() != st.query {

@@ -121,6 +121,13 @@ impl ModuleHost {
         &self.paths
     }
 
+    /// Signature verification keys this host accepts. The store installer
+    /// verifies downloads against exactly the set the loader will enforce at
+    /// load time — one owner of trust, no second guess.
+    pub fn trust(&self) -> &TrustStore {
+        &self.trust
+    }
+
     /// Verify and load `id` (no-op if already loaded).
     pub fn ensure_loaded(&self, id: &str) -> Result<()> {
         let mut map = lock(&self.loaded);
@@ -267,6 +274,13 @@ impl ModuleHost {
 
     pub fn unload(&self, id: &str) -> bool {
         lock(&self.loaded).remove(id).is_some()
+    }
+
+    /// Forget a quarantine verdict for `id` so a corrected binary (for
+    /// example one freshly installed from the store) can be retried. Without
+    /// this the only recovery would be the monitor's global RESTART.
+    pub fn clear_quarantine(&self, id: &str) -> bool {
+        lock(&self.quarantined).remove(id).is_some()
     }
 
     pub fn unload_all(&self) -> usize {

@@ -3190,7 +3190,9 @@ dependencies = [
  "ndk-context",
  "serde_json",
  "slint",
+ "tempfile",
  "tokio",
+ "ureq",
 ]
 
 [[package]]
@@ -3202,6 +3204,8 @@ dependencies = [
  "hex",
  "mandala-core",
  "rand",
+ "serde",
+ "serde_json",
  "tempfile",
 ]
 

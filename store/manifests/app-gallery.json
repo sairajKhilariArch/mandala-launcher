@@ -1,0 +1,5 @@
+{
+  "id": "app-gallery",
+  "label": "Gallery",
+  "description": "Browse images and media stored in the module's app-private directory."
+}

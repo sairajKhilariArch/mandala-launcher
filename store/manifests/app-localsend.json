@@ -1,0 +1,5 @@
+{
+  "id": "app-localsend",
+  "label": "LocalSend",
+  "description": "LocalSend-compatible transfer over the LAN — send and receive files between devices."
+}

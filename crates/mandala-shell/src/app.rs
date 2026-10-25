@@ -1,6 +1,7 @@
 //! Application controller: owns the UDF state and connects
 //! Slint callbacks -> reducer -> effects -> IPC broker -> modules -> UI.
 
+use crate::store::Store;
 use mandala_core::gesture::{Gesture, GestureConfig, GestureTracker};
 use mandala_core::ipc_bus::{IpcEnvelope, MicrokernelIpcBroker, HOST};
 use mandala_core::loader::{format_monitor, ModuleHost};
@@ -22,6 +23,7 @@ pub struct App {
     themes: Mutex<ThemeManager>,
     broker: Arc<MicrokernelIpcBroker>,
     host: Arc<ModuleHost>,
+    store: Store,
     rt: tokio::runtime::Handle,
     ui: Mutex<slint::Weak<MainWindow>>,
     started: Instant,
@@ -39,12 +41,15 @@ impl App {
             theme_id: themes.current().id.clone(),
             ..AppState::default()
         };
+        let store = Store::new(&host.paths().root);
+        log::info!("module store base URL: {}", store.base());
         Arc::new(Self {
             state: Mutex::new(state),
             gestures: Mutex::new(GestureTracker::new(GestureConfig::default())),
             themes: Mutex::new(themes),
             broker,
             host,
+            store,
             rt,
             ui: Mutex::new(ui),
             started: Instant::now(),
@@ -167,6 +172,20 @@ impl App {
                     }
                     Err(e) => self.dispatch(Action::Notice(e.to_string())),
                 }
+            }
+            Effect::FetchCatalog => match self.store.fetch(&self.host) {
+                Ok(out) => self.dispatch(Action::StoreCatalog {
+                    rows: out.rows,
+                    note: out.note,
+                }),
+                Err(e) => self.dispatch(Action::StoreCatalogError(e)),
+            },
+            Effect::InstallModule { id } => {
+                let (ok, msg) = self.store.install(&self.host, &id);
+                // Rows are recomputed from disk so the reducer never has to
+                // duplicate install bookkeeping.
+                let rows = self.store.rows(&self.host);
+                self.dispatch(Action::StoreInstallDone { ok, msg, rows });
             }
         }
     }

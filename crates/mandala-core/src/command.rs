@@ -73,6 +73,8 @@ pub enum Command {
     Theme(String),
     /// `monitor` opens the module process monitor.
     Monitor,
+    /// `store` opens the module store overlay.
+    Store,
     /// `> ls` -> terminal `run` (sandboxed command shell).
     Terminal(String),
     /// `2fa add …` -> authenticator `run`.
@@ -131,6 +133,7 @@ pub fn parse_command(input: &str) -> Command {
         "note" | "n" if !tail.is_empty() => return Command::Note(tail.to_string()),
         "theme" if !tail.is_empty() => return Command::Theme(tail.to_string()),
         "monitor" | "ps" => return Command::Monitor,
+        "store" => return Command::Store,
         "2fa" | "totp" | "aegis" => return Command::Aegis(tail.to_string()),
         "vault" | "passwords" => return Command::Vault(tail.to_string()),
         "lsend" | "localsend" => return Command::LocalSend(tail.to_string()),
@@ -186,6 +189,7 @@ mod tests {
         assert_eq!(parse_command("n x"), Command::Note("x".into()));
         assert_eq!(parse_command("theme next"), Command::Theme("next".into()));
         assert_eq!(parse_command("monitor"), Command::Monitor);
+        assert_eq!(parse_command("store"), Command::Store);
         assert_eq!(parse_command("termin"), Command::Launch("app-terminal"));
         assert_eq!(parse_command("qqqqzz"), Command::NoMatch("qqqqzz".into()));
     }

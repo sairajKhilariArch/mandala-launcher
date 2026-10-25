@@ -1,7 +1,7 @@
 import { ThemePalette, Responsive } from "theme_tokens.slint";
-import { SlotItem, SlotButton, SlotRow, ActionButton } from "components.slint";
+import { SlotItem, SlotButton, SlotRow, StoreItem, ActionButton } from "components.slint";
 
-export { ThemePalette, Responsive, SlotItem }
+export { ThemePalette, Responsive, SlotItem, StoreItem }
 
 // Tri-panel shell:
 //   centre  = command input + canvas + Panel A dock (bottom thumb zone)
@@ -26,6 +26,9 @@ export component MainWindow inherits Window {
     in property <bool> left-open;
     in property <bool> right-open;
     in property <bool> monitor-open;
+    in property <bool> store-open;
+    in property <[StoreItem]> store-rows;
+    in property <string> store-status;
     in-out property <string> query;
 
     callback slot-activated(string);
@@ -37,6 +40,8 @@ export component MainWindow inherits Window {
     callback resized(float);
     callback monitor-unload-all();
     callback monitor-restart-all();
+    callback store-install(string);
+    callback store-refresh();
 
     property <bool> expanded: root.width >= 840px;
     property <length> drawer-w: root.expanded ? 320px : 280px;
@@ -237,6 +242,101 @@ export component MainWindow inherits Window {
                 ActionButton {
                     text: "RESTART";
                     clicked => { root.monitor-restart-all(); }
+                }
+                ActionButton {
+                    text: "CLOSE";
+                    clicked => { root.close-overlays(); }
+                }
+            }
+        }
+    }
+
+    // Module store (the `store` command). Rows come straight from the
+    // catalog; statuses are computed by the reducer from on-disk state.
+    if root.store-open: Rectangle {
+        background: ThemePalette.canvas-bg;
+
+        // Swallow input so nothing underneath is triggered.
+        TouchArea { }
+
+        VerticalLayout {
+            padding: 24px;
+            padding-top: 48px;
+            spacing: 12px;
+
+            Text {
+                text: "MODULE STORE";
+                color: ThemePalette.text-secondary;
+                font-family: ThemePalette.font-family;
+                font-size: 11px;
+            }
+
+            Text {
+                text: root.store-status;
+                color: ThemePalette.text-secondary;
+                font-family: ThemePalette.font-family;
+                font-size: 12px;
+                wrap: word-wrap;
+            }
+
+            Flickable {
+                vertical-stretch: 1;
+                VerticalLayout {
+                    spacing: 8px;
+                    for item in root.store-rows: Rectangle {
+                        height: 64px;
+                        background: ThemePalette.surface-primary;
+                        border-radius: ThemePalette.corner-radius;
+                        border-width: ThemePalette.border-width;
+                        border-color: ThemePalette.surface-border;
+
+                        HorizontalLayout {
+                            padding-left: 12px;
+                            padding-right: 12px;
+                            spacing: 12px;
+
+                            VerticalLayout {
+                                horizontal-stretch: 1;
+                                spacing: 2px;
+
+                                Text {
+                                    text: item.label + "  " + item.version;
+                                    color: ThemePalette.text-primary;
+                                    font-family: ThemePalette.font-family;
+                                    font-size: 15px;
+                                }
+                                Text {
+                                    text: item.description;
+                                    color: ThemePalette.text-secondary;
+                                    font-family: ThemePalette.font-family;
+                                    font-size: 11px;
+                                    overflow: elide;
+                                }
+                            }
+
+                            if item.actionable: ActionButton {
+                                width: 110px;
+                                text: item.status;
+                                clicked => { root.store-install(item.id); }
+                            }
+                            if !item.actionable: Text {
+                                text: item.status;
+                                color: ThemePalette.text-secondary;
+                                font-family: ThemePalette.font-family;
+                                font-size: 11px;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+                }
+            }
+
+            HorizontalLayout {
+                height: 48px;
+                spacing: 8px;
+                ActionButton {
+                    text: "REFRESH";
+                    clicked => { root.store-refresh(); }
                 }
                 ActionButton {
                     text: "CLOSE";

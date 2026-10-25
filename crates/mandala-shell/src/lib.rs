@@ -3,6 +3,7 @@
 #[cfg(target_os = "android")]
 mod android;
 mod app;
+mod store;
 
 use anyhow::Context;
 use app::App;
@@ -18,6 +19,31 @@ use mandala_core::MandalaError;
 use mandala_ui::MainWindow;
 use slint::ComponentHandle;
 use std::sync::Arc;
+
+/// Trusted keys for this build: every `trust/*.pub` on disk plus the release
+/// public key compiled into the binary. A fresh install has an empty trust
+/// directory, yet store-published modules must verify — the baked key closes
+/// that gap while `dev-setup.sh` dev keys stay additive for local work.
+fn load_trust(paths: &HostPaths) -> anyhow::Result<TrustStore> {
+    let mut trust = TrustStore::load_dir(&paths.trust_dir()).context("loading trusted keys")?;
+    trust
+        .add_hex(include_str!("../release.pub"))
+        .context("baked-in release public key")?;
+    Ok(trust)
+}
+
+/// How many signed module binaries are sitting in `modules/` right now —
+/// part of the first-run summary so an empty install is visible in logcat.
+fn installed_module_count(paths: &HostPaths) -> usize {
+    let ext = std::env::consts::DLL_EXTENSION;
+    std::fs::read_dir(paths.modules_dir())
+        .map(|rd| {
+            rd.flatten()
+                .filter(|e| e.path().extension().and_then(|x| x.to_str()) == Some(ext))
+                .count()
+        })
+        .unwrap_or(0)
+}
 
 /// Build every subsystem, show the window and block until it closes.
 pub fn run(paths: HostPaths) -> anyhow::Result<()> {
@@ -36,14 +62,16 @@ fn run_inner(paths: HostPaths, exit_after_boot: bool) -> anyhow::Result<()> {
     paths.ensure().context("creating Mandala home directory")?;
     let after_home = boot.elapsed();
 
-    let trust = TrustStore::load_dir(&paths.trust_dir()).context("loading trusted keys")?;
-    let no_keys = trust.is_empty();
-    if no_keys {
-        log::warn!(
-            "no trusted public keys in {}: every module will be rejected",
-            paths.trust_dir().display()
-        );
-    }
+    let trust = load_trust(&paths)?;
+    // One line that answers "why does my fresh install reject everything?"
+    // without a debugger: where the home is, how many keys verify signatures,
+    // how many modules are installed.
+    log::info!(
+        "mandala home: {} · trusted keys {} · {} module(s) installed",
+        paths.root.display(),
+        trust.len(),
+        installed_module_count(&paths)
+    );
 
     let after_trust = boot.elapsed();
     let mut themes = ThemeManager::with_presets();
@@ -124,12 +152,15 @@ fn run_inner(paths: HostPaths, exit_after_boot: bool) -> anyhow::Result<()> {
         let app = app.clone();
         move || app.dispatch(Action::MonitorRestartAll)
     });
-
-    if no_keys {
-        app.dispatch(Action::Notice(
-            "No trusted keys installed, so no module can load.\nRun scripts/dev-setup.sh (see README).".into(),
-        ));
-    }
+    ui.on_store_install({
+        let app = app.clone();
+        move |id| app.dispatch(Action::StoreInstall(id.to_string()))
+    });
+    // Refresh re-runs the same open path: re-fetch, recompute statuses.
+    ui.on_store_refresh({
+        let app = app.clone();
+        move || app.dispatch(Action::StoreOpen)
+    });
 
     let after_wiring = boot.elapsed();
 
@@ -173,7 +204,7 @@ fn host_shutdown(_app: &Arc<App>) {
 /// catch a broken signature pipeline or a module that no longer loads.
 pub fn selftest(paths: HostPaths) -> anyhow::Result<()> {
     paths.ensure().context("creating Mandala home directory")?;
-    let trust = TrustStore::load_dir(&paths.trust_dir()).context("loading trusted keys")?;
+    let trust = load_trust(&paths)?;
     let (broker, _rx) = MicrokernelIpcBroker::new(8, AccessControlList::default_policy());
     let host = ModuleHost::new(paths, trust, Arc::new(broker));
 
@@ -215,9 +246,16 @@ pub fn selftest(paths: HostPaths) -> anyhow::Result<()> {
 #[no_mangle]
 fn android_main(app: slint::android::AndroidApp) {
     slint::android::init(app.clone()).expect("slint android init");
-    let root = app
-        .internal_data_path()
-        .unwrap_or_else(|| std::path::PathBuf::from("/data/local/tmp/mandala"));
+    // The app-private files dir is the only writable, persistent Mandala home
+    // an installed APK gets. The old `/data/local/tmp` fallback is shell-owned
+    // and unwritable for a normal app, so it could only ever lose every module
+    // install: refuse to start instead of starting broken.
+    let Some(root) = app.internal_data_path() else {
+        log::error!(
+            "internal_data_path unavailable: refusing to start with an ephemeral Mandala home"
+        );
+        return;
+    };
     if let Err(e) = run(HostPaths::new(root)) {
         log::error!("mandala exited with error: {e:#}");
     }

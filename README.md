@@ -41,7 +41,8 @@ By applying **Fitts’s Law** to spatial ergonomics and decoupling application e
 * ⚡ **Rust + Slint Native Performance:** Zero garbage-collection stutters and native startup. Measured cold-boot and memory numbers — including the gap to the original 20 ms / 5 MB targets — are in [`docs/performance.md`](docs/performance.md).
 * 🛡️ **Microkernel IPC Bus:** Hypervisor-style Access Control Lists (ACL) mediate every module-to-module and module-to-host call, and Ed25519 signatures decide which libraries may load at all. Modules are `dlopen`ed into the host process, so this is a reference monitor with a signed module set — **not** OS memory or syscall isolation. See [README_right_now.md](README_right_now.md).
 * 🎨 **Dynamic Theme Engine:** Hot-swappable JSON design manifests supporting **Minimalist OLED**, **Cartoonish Cel-Shaded**, and **Retro Terminal** themes.
-* 🌿 **Monorepo & Submodule Integration:** Modular "branch-per-app" architecture powered by Git submodules for isolated feature testing and building.
+* 🧩 **Module store (shell-only `main`):** The launcher ships as a shell. Each module is built, signed and published on its own tag (`app-notes/v1.2.0`) by [`.github/workflows/module.yml`](.github/workflows/module.yml) to the orphan `store` branch GitHub Pages serves. The in-app Store downloads a module, checks its size, SHA-256, ELF ABI and Ed25519 signature against a key baked into the launcher, then installs it into app-private storage — no APK rebuild. See [`docs/module-store.md`](docs/module-store.md).
+* 🌿 **Independent module releases:** Every module has its own release pipeline and version, so a fix in one slot never drags the rest of the launcher through a shell release.
 
 ---
 

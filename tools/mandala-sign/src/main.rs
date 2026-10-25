@@ -12,16 +12,21 @@
 
 use anyhow::{bail, Context, Result};
 use ed25519_dalek::SigningKey;
-use mandala_core::crypto::{parse_public_key, parse_signing_key, sha256, sign_binary, TrustStore};
+use mandala_core::catalog::{Catalog, CatalogEntry};
+use mandala_core::crypto::{
+    parse_public_key, parse_signing_key, sha256, sha256_hex, sign_binary, TrustStore,
+};
 use mandala_core::paths::HostPaths;
 use rand::rngs::OsRng;
 use std::path::{Path, PathBuf};
 
 const USAGE: &str = "usage:
   mandala-sign keygen  <dir> [--force]
-  mandala-sign sign    --key <host.key> <binary>
-  mandala-sign verify  --pub <host.pub> <binary>
-  mandala-sign install --home <mandala-home> --key <host.key> <binary>...";
+  mandala-sign sign     --key <host.key> <binary>
+  mandala-sign verify   --pub <host.pub> <binary>
+  mandala-sign install  --home <mandala-home> --key <host.key> <binary>...
+  mandala-sign registry --abi <abi> --dir <signed-modules> --manifests <dir> \\
+                        --out <registry.json> [--pub <host.pub>]";
 
 fn main() {
     if let Err(e) = run(std::env::args().skip(1).collect()) {
@@ -39,6 +44,7 @@ fn run(args: Vec<String>) -> Result<()> {
         "sign" => sign(rest),
         "verify" => verify(rest),
         "install" => install(rest),
+        "registry" => registry(rest),
         "-h" | "--help" | "help" => {
             println!("{USAGE}");
             Ok(())
@@ -178,6 +184,146 @@ fn install(args: &[String]) -> Result<()> {
     Ok(())
 }
 
+#[derive(serde::Deserialize)]
+struct Manifest {
+    id: String,
+    label: String,
+    #[serde(default)]
+    description: String,
+}
+
+fn now_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// Scan a directory of signed binaries into the catalog the launcher fetches.
+///
+/// The `store` branch keeps `modules/<abi>/<id>.so`, `<id>.so.sig` and
+/// `<id>.so.ver` (the release version) side by side; display copy lives in
+/// `store/manifests/<id>.json` on main. The result is validated with the same
+/// `Catalog` rules the launcher enforces, so CI cannot publish a catalog the
+/// Store would refuse.
+fn build_registry(
+    abi: &str,
+    dir: &Path,
+    manifests: &Path,
+    pubkey: Option<&Path>,
+) -> Result<Catalog> {
+    if mandala_core::catalog::abi_e_machine(abi).is_none() {
+        bail!("unknown ABI `{abi}` (expected android-arm64 or android-x86_64)");
+    }
+    let trust = match pubkey {
+        Some(p) => {
+            let text =
+                std::fs::read_to_string(p).with_context(|| format!("reading {}", p.display()))?;
+            Some(TrustStore::new(vec![parse_public_key(&text)?]))
+        }
+        None => None,
+    };
+
+    let mut modules = Vec::new();
+    let entries = std::fs::read_dir(dir).with_context(|| format!("reading {}", dir.display()))?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("so") {
+            continue;
+        }
+        let name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .with_context(|| format!("bad file name {}", path.display()))?
+            .to_string();
+        let id = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or_default()
+            .to_string();
+        mandala_core::loader::validate_module_id(&id)
+            .with_context(|| format!("module id from {}", path.display()))?;
+
+        let bytes = std::fs::read(&path).with_context(|| format!("reading {}", path.display()))?;
+        let sig_path = sig_path(&path);
+        let sig = std::fs::read(&sig_path)
+            .with_context(|| format!("missing signature {}", sig_path.display()))?;
+        if let Some(ts) = &trust {
+            ts.verify(&sha256(&bytes), &sig)
+                .with_context(|| format!("signature check for {id}"))?;
+        }
+
+        let ver_path = path.with_file_name(format!("{name}.ver"));
+        let version = std::fs::read_to_string(&ver_path)
+            .with_context(|| format!("missing version file {}", ver_path.display()))?
+            .trim()
+            .to_string();
+
+        let manifest_path = manifests.join(format!("{id}.json"));
+        let text = std::fs::read_to_string(&manifest_path)
+            .with_context(|| format!("missing manifest {}", manifest_path.display()))?;
+        let manifest: Manifest = serde_json::from_str(&text)
+            .with_context(|| format!("manifest {}", manifest_path.display()))?;
+        if manifest.id != id {
+            bail!(
+                "{} says id `{}` but the binary is `{id}`",
+                manifest_path.display(),
+                manifest.id
+            );
+        }
+
+        modules.push(CatalogEntry {
+            id,
+            label: manifest.label,
+            description: manifest.description,
+            version,
+            sha256: sha256_hex(&bytes),
+            size: bytes.len() as u64,
+            url: format!("modules/{abi}/{name}"),
+            sig: format!("modules/{abi}/{name}.sig"),
+        });
+    }
+    if modules.is_empty() {
+        bail!("no signed modules in {}", dir.display());
+    }
+    modules.sort_by(|a, b| a.id.cmp(&b.id));
+    let cat = Catalog {
+        schema: mandala_core::catalog::SCHEMA,
+        abi: abi.to_string(),
+        generated: format!("unix:{}", now_secs()),
+        modules,
+    };
+    cat.validate(abi)?;
+    Ok(cat)
+}
+
+fn registry(args: &[String]) -> Result<()> {
+    let (abi, rest) = take_opt(args, "--abi")?;
+    let (dir, rest) = take_opt(&rest, "--dir")?;
+    let (manifests, rest) = take_opt(&rest, "--manifests")?;
+    let (out, rest) = take_opt(&rest, "--out")?;
+    let (pubkey, rest) = take_opt(&rest, "--pub")?;
+    if !rest.is_empty() {
+        bail!("{USAGE}");
+    }
+    let abi = abi.context("--abi is required")?;
+    let dir = PathBuf::from(dir.context("--dir is required")?);
+    let manifests = PathBuf::from(manifests.context("--manifests is required")?);
+    let out = PathBuf::from(out.context("--out is required")?);
+
+    let cat = build_registry(&abi, &dir, &manifests, pubkey.as_deref().map(Path::new))?;
+    if let Some(parent) = out.parent().filter(|p| !p.as_os_str().is_empty()) {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(&out, format!("{}\n", serde_json::to_string_pretty(&cat)?))?;
+    println!(
+        "wrote {} ({} modules, abi {abi})",
+        out.display(),
+        cat.modules.len()
+    );
+    Ok(())
+}
+
 #[cfg(unix)]
 fn write_secret(path: &Path, bytes: &[u8]) -> Result<()> {
     use std::io::Write;
@@ -290,6 +436,129 @@ mod tests {
             .mode()
             & 0o777;
         assert_eq!(mode, 0o600);
+    }
+
+    fn write_module(dir: &Path, id: &str, version: &str, key: &SigningKey) {
+        std::fs::create_dir_all(dir).unwrap();
+        let so = dir.join(format!("{id}.so"));
+        std::fs::write(&so, format!("binary of {id}")).unwrap();
+        sign_file(key, &so).unwrap();
+        std::fs::write(dir.join(format!("{id}.so.ver")), format!("{version}\n")).unwrap();
+    }
+
+    fn write_manifest(dir: &Path, id: &str) {
+        std::fs::create_dir_all(dir).unwrap();
+        std::fs::write(
+            dir.join(format!("{id}.json")),
+            format!(r#"{{"id":"{id}","label":"Label {id}","description":"Desc {id}"}}"#),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn registry_builds_and_validates_a_catalog() {
+        let d = tempfile::tempdir().unwrap();
+        let keys = d.path().join("keys");
+        run(s(&["keygen", keys.to_str().unwrap()])).unwrap();
+        let key = load_key(keys.join("host.key").to_str().unwrap()).unwrap();
+        let pubf = keys.join("host.pub");
+
+        let mods = d.path().join("modules/android-arm64");
+        let mans = d.path().join("manifests");
+        write_module(&mods, "app-weather", "0.9.1", &key);
+        write_module(&mods, "app-notes", "1.2.0", &key);
+        write_manifest(&mans, "app-weather");
+        write_manifest(&mans, "app-notes");
+
+        let cat = build_registry("android-arm64", &mods, &mans, Some(&pubf)).unwrap();
+        assert_eq!(cat.modules.len(), 2);
+        assert_eq!(cat.modules[0].id, "app-notes"); // sorted by id
+        assert_eq!(cat.modules[0].version, "1.2.0");
+        assert_eq!(cat.modules[0].url, "modules/android-arm64/app-notes.so");
+        assert_eq!(cat.modules[0].size, "binary of app-notes".len() as u64);
+        // The launcher parses exactly this shape.
+        let json = serde_json::to_string(&cat).unwrap();
+        let back = Catalog::parse(&json, "android-arm64").unwrap();
+        assert_eq!(back, cat);
+
+        // A tampered binary fails verification before anything is published.
+        std::fs::write(mods.join("app-notes.so"), b"tampered").unwrap();
+        assert!(build_registry("android-arm64", &mods, &mans, Some(&pubf)).is_err());
+    }
+
+    #[test]
+    fn registry_rejects_incomplete_or_mismatched_inputs() {
+        let d = tempfile::tempdir().unwrap();
+        let keys = d.path().join("keys");
+        run(s(&["keygen", keys.to_str().unwrap()])).unwrap();
+        let key = load_key(keys.join("host.key").to_str().unwrap()).unwrap();
+        let mods = d.path().join("modules/android-arm64");
+        let mans = d.path().join("manifests");
+        write_module(&mods, "app-notes", "1.0.0", &key);
+        write_manifest(&mans, "app-notes");
+
+        // Missing manifest.
+        std::fs::remove_file(mans.join("app-notes.json")).unwrap();
+        assert!(build_registry("android-arm64", &mods, &mans, None).is_err());
+        write_manifest(&mans, "app-notes");
+
+        // Missing version sidecar.
+        std::fs::remove_file(mods.join("app-notes.so.ver")).unwrap();
+        assert!(build_registry("android-arm64", &mods, &mans, None).is_err());
+        std::fs::write(mods.join("app-notes.so.ver"), "1.0.0\n").unwrap();
+
+        // Missing signature.
+        std::fs::remove_file(mods.join("app-notes.so.sig")).unwrap();
+        assert!(build_registry("android-arm64", &mods, &mans, None).is_err());
+        sign_file(&key, &mods.join("app-notes.so")).unwrap();
+
+        // Manifest id that disagrees with the file name.
+        std::fs::write(
+            mans.join("app-notes.json"),
+            r#"{"id":"app-other","label":"x","description":""}"#,
+        )
+        .unwrap();
+        assert!(build_registry("android-arm64", &mods, &mans, None).is_err());
+        write_manifest(&mans, "app-notes");
+
+        // Unknown ABI and an empty directory are both hard errors.
+        assert!(build_registry("windows", &mods, &mans, None).is_err());
+        let empty = d.path().join("empty");
+        std::fs::create_dir_all(&empty).unwrap();
+        assert!(build_registry("android-arm64", &empty, &mans, None).is_err());
+    }
+
+    #[test]
+    fn registry_cli_writes_the_catalog_file() {
+        let d = tempfile::tempdir().unwrap();
+        let keys = d.path().join("keys");
+        run(s(&["keygen", keys.to_str().unwrap()])).unwrap();
+        let key = load_key(keys.join("host.key").to_str().unwrap()).unwrap();
+        let mods = d.path().join("modules/android-arm64");
+        let mans = d.path().join("manifests");
+        write_module(&mods, "app-notes", "1.0.0", &key);
+        write_manifest(&mans, "app-notes");
+        let out = d.path().join("registry/android-arm64.json");
+
+        run(s(&[
+            "registry",
+            "--abi",
+            "android-arm64",
+            "--dir",
+            mods.to_str().unwrap(),
+            "--manifests",
+            mans.to_str().unwrap(),
+            "--out",
+            out.to_str().unwrap(),
+            "--pub",
+            keys.join("host.pub").to_str().unwrap(),
+        ]))
+        .unwrap();
+
+        let text = std::fs::read_to_string(&out).unwrap();
+        let cat = Catalog::parse(&text, "android-arm64").unwrap();
+        assert_eq!(cat.modules.len(), 1);
+        assert_eq!(cat.modules[0].id, "app-notes");
     }
 
     #[test]
