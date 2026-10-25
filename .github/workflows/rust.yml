@@ -60,7 +60,7 @@ jobs:
       - name: Run workspace tests
         run: cargo test --workspace
 
-      - name: Build release binaries and modules
+      - name: Build release binaries
         run: cargo build --release --workspace
 
       - name: Package desktop build
@@ -71,15 +71,12 @@ jobs:
           D="dist/${NAME}"
           REL=target/release
 
-          mkdir -p "$D/themes" "$D/modules"
+          mkdir -p "$D/themes"
           cp "$REL/mandala-shell${{ matrix.exe }}" "$REL/mandala-sign${{ matrix.exe }}" "$D/"
           cp themes/*.json "$D/themes/"
           cp README.md "$D/"
-
-          for m in app_notes app_calculator app_terminal app_aegis app_vault app_localsend \
-                   app_weather app_rss app_tasks app_reader app_gallery app_chat app_ai app_camera; do
-            cp "$REL/${{ matrix.prefix }}${m}.${{ matrix.ext }}" "$D/modules/"
-          done
+          # No bundled modules: each module is released from its own branch
+          # (mod/<id>) and installed from the signed store at runtime.
 
           cd dist
           if [ "${{ runner.os }}" = "Windows" ]; then
@@ -183,17 +180,8 @@ jobs:
           test -x "$BUILD_TOOLS/apksigner"
           "$BUILD_TOOLS/apksigner" verify --print-certs dist/*.apk
 
-      # Modules ship through .github/workflows/module.yml (signed, on the
-      # `store` branch); this job only proves they still cross-compile.
-      - name: Verify modules cross-compile for Android
-        run: |
-          set -euo pipefail
-          cargo ndk -t arm64-v8a build --release --lib \
-            -p app-notes -p app-calculator -p app-terminal -p app-aegis \
-            -p app-vault -p app-localsend -p app-weather -p app-rss \
-            -p app-tasks -p app-reader -p app-gallery -p app-chat \
-            -p app-ai -p app-camera
-
+      # Modules release through their own branches (mod/<id>) via tag-pushed
+      # module.yml files; they install at runtime from the signed store.
       - name: Generate SHA-256 checksums
         run: |
           set -euo pipefail

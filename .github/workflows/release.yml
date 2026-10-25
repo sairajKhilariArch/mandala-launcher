@@ -48,49 +48,19 @@ jobs:
         run: cargo build --release --workspace
 
       - name: Package
-        env:
-          # Required: hex Ed25519 secret key matching the release public key
-          # committed at crates/mandala-shell/release.pub (the key the launcher
-          # bakes in). Modules are never published unsigned.
-          SIGNING_KEY: ${{ secrets.MANDALA_SIGNING_KEY }}
         run: |
           set -euo pipefail
           VERSION="${GITHUB_REF_NAME:-dev}"
           NAME="mandala-${VERSION}-${{ matrix.name }}"
           D="dist/${NAME}"
           REL=target/release
-          mkdir -p "$D/themes" "$D/modules-unsigned"
+          mkdir -p "$D/themes"
           cp "$REL/mandala-shell${{ matrix.exe }}" "$REL/mandala-sign${{ matrix.exe }}" "$D/"
           cp themes/*.json "$D/themes/"
           cp README.md "$D/"
-          for m in app_notes app_calculator app_terminal app_aegis app_vault app_localsend \
-                   app_weather app_rss app_tasks app_reader app_gallery app_chat app_ai app_camera; do
-            cp "$REL/${{ matrix.prefix }}${m}.${{ matrix.ext }}" "$D/modules-unsigned/"
-          done
-
-          if [ -z "${SIGNING_KEY:-}" ]; then
-            echo "::error::MANDALA_SIGNING_KEY is not set — refusing to publish unsigned modules (see docs/module-store.md)."
-            exit 1
-          fi
-          umask 077
-          printf '%s\n' "$SIGNING_KEY" > "$RUNNER_TEMP/host.key"
-          mkdir -p "$D/mandala-home/trust"
-          # The trusted key is the one committed in-tree, so a wrong secret
-          # cannot ship modules this launcher would reject.
-          cp crates/mandala-shell/release.pub "$D/mandala-home/trust/host.pub"
-          "$REL/mandala-sign${{ matrix.exe }}" install \
-            --home "$D/mandala-home" --key "$RUNNER_TEMP/host.key" \
-            "$D"/modules-unsigned/*
-          # Prove the secret really matches the committed key: a mismatch
-          # would ship modules every launcher rejects.
-          for f in "$D"/mandala-home/modules/*; do
-            case "$f" in *.sig) continue ;; esac
-            "$REL/mandala-sign${{ matrix.exe }}" verify \
-              --pub crates/mandala-shell/release.pub "$f"
-          done
-          rm -f "$RUNNER_TEMP/host.key"
-          rm -rf "$D/modules-unsigned"
-          echo "Modules signed and verified against release.pub."
+          # Shell-only archives: modules are released from their own branches
+          # (mod/<id>), signed there with MANDALA_SIGNING_KEY, and installed
+          # at runtime from the signed store (docs/module-store.md).
 
           cd dist
           if [ "${{ runner.os }}" = "Windows" ]; then

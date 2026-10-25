@@ -1,5 +1,0 @@
-{
-  "id": "app-vault",
-  "label": "Password Vault",
-  "description": "Password vault with Argon2id key derivation and local-only storage."
-}

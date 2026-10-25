@@ -132,12 +132,18 @@ fn is_safe_relpath(v: &str) -> bool {
         && !v.split('/').any(|p| p == "..")
 }
 
-/// Registry ABI name for the running platform. `None` on desktop, where the
-/// Store is browse-only and `scripts/dev-setup.sh` owns module installs.
+/// Registry ABI name for the running platform. `None` on platforms with no
+/// catalog yet (macOS/Windows desktop). On Linux desktop, the store serves
+/// natively-built modules, so installs work there too.
 pub fn current_abi() -> Option<&'static str> {
     match (std::env::consts::OS, std::env::consts::ARCH) {
         ("android", "aarch64") => Some("android-arm64"),
         ("android", "x86_64") => Some("android-x86_64"),
+        // Modules for Linux desktop are served by the store and built natively
+        // by each module branch's release workflow (
+        // registry/linux-x86_64.json). macOS/Windows desktop have no catalog
+        // yet: packaged archives for those targets are the bare shell.
+        ("linux", "x86_64") => Some("linux-x86_64"),
         _ => None,
     }
 }
@@ -148,6 +154,7 @@ pub fn abi_e_machine(abi: &str) -> Option<u16> {
     match abi {
         "android-arm64" => Some(183), // EM_AARCH64
         "android-x86_64" => Some(62), // EM_X86_64
+        "linux-x86_64" => Some(62),   // EM_X86_64
         _ => None,
     }
 }
@@ -298,10 +305,16 @@ mod tests {
     fn abi_helpers_map_predictably() {
         assert_eq!(abi_e_machine("android-arm64"), Some(183));
         assert_eq!(abi_e_machine("android-x86_64"), Some(62));
+        assert_eq!(abi_e_machine("linux-x86_64"), Some(62));
         assert_eq!(abi_e_machine("windows"), None);
-        // Desktop: no registry is published for this platform.
-        if std::env::consts::OS != "android" {
-            assert_eq!(current_abi(), None);
-        }
+        // The catalog ABI follows the running platform: Android ABIs and
+        // Linux x86_64; None on macOS/Windows, which have no catalog yet.
+        let expected = match (std::env::consts::OS, std::env::consts::ARCH) {
+            ("android", "aarch64") => Some("android-arm64"),
+            ("android", "x86_64") => Some("android-x86_64"),
+            ("linux", "x86_64") => Some("linux-x86_64"),
+            _ => None,
+        };
+        assert_eq!(current_abi(), expected);
     }
 }

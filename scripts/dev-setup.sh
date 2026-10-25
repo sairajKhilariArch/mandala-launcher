@@ -31,16 +31,18 @@ mkdir -p "$HOME_DIR/trust" "$HOME_DIR/modules" "$HOME_DIR/themes"
 cp "$KEY_DIR/host.pub" "$HOME_DIR/trust/host.pub"
 cp -n themes/*.json "$HOME_DIR/themes/" 2>/dev/null || true
 
-echo "==> signing + installing modules into $HOME_DIR/modules"
-# Every module-backed slot (14 of the 15; A3 All Apps is built into the host).
-"$TARGET/mandala-sign" install --home "$HOME_DIR" --key "$KEY_DIR/host.key" \
-  "$TARGET/libapp_notes.$EXT" "$TARGET/libapp_calculator.$EXT" \
-  "$TARGET/libapp_terminal.$EXT" "$TARGET/libapp_aegis.$EXT" \
-  "$TARGET/libapp_vault.$EXT" "$TARGET/libapp_localsend.$EXT" \
-  "$TARGET/libapp_weather.$EXT" "$TARGET/libapp_rss.$EXT" \
-  "$TARGET/libapp_tasks.$EXT" "$TARGET/libapp_reader.$EXT" \
-  "$TARGET/libapp_gallery.$EXT" "$TARGET/libapp_chat.$EXT" \
-  "$TARGET/libapp_ai.$EXT" "$TARGET/libapp_camera.$EXT"
+# Modules release from their own branches (mod/<id>) and are installed from
+# the in-app store; this script only stages ones already compiled in this
+# target dir (e.g. when a mod/<id> checkout shared this working tree).
+set -- "$TARGET"/libapp_*.*"$EXT"
+if [ -e "$1" ]; then
+  echo "==> signing + installing locally built modules into $HOME_DIR/modules"
+  "$TARGET/mandala-sign" install --home "$HOME_DIR" --key "$KEY_DIR/host.key" \
+    "$@"
+else
+  echo "==> no module libraries in $TARGET — modules publish per-branch (mod/<id>);"
+  echo "    the in-app store installs them at runtime."
+fi
 
 cat <<EOF
 

@@ -41,27 +41,37 @@ module.
    branch `store`, folder `/ (root)`. The first `module.yml` run creates that
    orphan branch.
 
-5. Push a tag: `git tag app-notes/v1.2.0 && git push origin app-notes/v1.2.0`.
+5. Push the module tag from its branch: `git switch mod/app-notes &&
+   git tag app-notes/v1.2.0 && git push origin mod/app-notes app-notes/v1.2.0`.
+   (Each module lives on its own branch; the tag triggers the workflow
+   committed *on that branch*. `main` holds only the shell.)
 
 ## What a module release does
 
-`.github/workflows/module.yml`, one module per tag (`<id>/v<semver>`):
+`module.yml` on the module's own branch (`mod/<id>`), triggered by a
+`<id>/v<semver>` tag pushed from that branch:
 
 1. validates the module id and version **before** building,
-2. `cargo ndk` builds it for `arm64-v8a` and `x86_64`,
-3. renames `libapp_notes.so` → `app-notes.so` (the loader's id convention),
-4. signs it → `app-notes.so.sig`, and writes `app-notes.so.ver`,
-5. copies it onto the `store` branch under `modules/<abi>/`,
-6. regenerates `registry/<abi>.json` from **all** modules on the branch,
-   verifying each signature against `crates/mandala-shell/release.pub` — a
-   mismatched secret fails here instead of shipping modules devices reject,
-7. commits and pushes. Pages serves the result at
+2. runs `cargo test --workspace` on the branch (module + module API),
+3. builds `android-arm64` + `android-x86_64` via `cargo ndk` and the Linux
+   desktop host (`linux-x86_64`) natively on the runner,
+4. renames `libapp_notes.so` → `app-notes.so` (the loader's id convention),
+5. signs it → `app-notes.so.sig`, writes `app-notes.so.ver`, and verifies the
+   signature against main's committed `crates/mandala-shell/release.pub`,
+6. copies it onto the `store` branch under `modules/<abi>/`,
+7. regenerates `registry/<abi>.json` from **all** modules on the branch,
+   verifying each signature as in step 5 — a mismatched secret fails here
+   instead of shipping modules devices reject,
+8. commits and pushes. Pages serves the result at
    `https://<owner>.github.io/<repo>/`.
 
-`main` never publishes module bytes: `release.yml` ships the APK/desktop shell
-plus a developer-only signed `mandala-home/`, and `module.yml` owns everything
-else. Both workflows require `MANDALA_SIGNING_KEY`; neither can publish
-unsigned modules.
+Site + metadata inputs come from the `website` branch (checked out by the
+workflow): `store-site/index.html` and `store/manifests/<id>.json`.
+
+`main` never publishes module bytes or module sources: its `release.yml`
+ships the APK and shell-only desktop archives, and each module's `module.yml`
+owns everything module-related. It requires `MANDALA_SIGNING_KEY`; it cannot
+publish unsigned modules.
 
 ## Catalog format
 
@@ -202,18 +212,36 @@ scripts/dev-setup.sh                     # dev key, signs + installs all modules
 ./target/release/mandala-shell --selftest # verifies + dlopens everything headless
 ```
 
-For a local registry, generate one into `store-site/` and serve it:
+For a local registry, generate one from a module's own branch checkout and
+serve it. The manifests + site live on the `website` branch; the signing tool
+and the trusted public key live on `main`.
 
 ```bash
-M=store-site/modules/android-arm64
-mkdir -p "$M" store-site/registry
-cp target/release/libapp_notes.so "$M/app-notes.so"
-./target/release/mandala-sign sign --key release-keys/host.key "$M/app-notes.so"
-printf '1.2.0\n' > "$M/app-notes.so.ver"
-./target/release/mandala-sign registry --abi android-arm64 --dir "$M" \
-  --manifests store/manifests --out store-site/registry/android-arm64.json \
-  --pub crates/mandala-shell/release.pub
-(cd store-site && python3 -m http.server 8000)
+# one-time helper checkouts, next to the module branch checkout
+git worktree add ../mandala-website website    # site source + manifests
+git worktree add ../mandala-main main          # mandala-sign + release.pub
+(cd ../mandala-main && cargo build --release -p mandala-sign)
+
+# in the mod/app-notes checkout
+git switch mod/app-notes
+cargo build --release -p app-notes             # ABI=linux-x86_64 (desktop)
+# for a *device* test instead: cargo ndk -t arm64-v8a build --release --lib -p app-notes
+#   ABI=android-arm64  and copy from target/aarch64-linux-android/release/
+
+ID=app-notes; ABI=linux-x86_64
+M=/tmp/store-dev
+mkdir -p "$M/registry" "$M/modules/$ABI"
+cp target/release/libapp_notes.so "$M/modules/$ABI/$ID.so"
+../mandala-main/target/release/mandala-sign sign \
+  --key ../mandala-main/release-keys/host.key "$M/modules/$ABI/$ID.so"
+printf '1.2.0\n' > "$M/modules/$ABI/$ID.so.ver"
+../mandala-main/target/release/mandala-sign registry \
+  --dir "$M/modules/$ABI" --abi "$ABI" \
+  --manifests ../mandala-website/store/manifests \
+  --out "$M/registry/$ABI.json" \
+  --pub ../mandala-main/crates/mandala-shell/release.pub
+cp ../mandala-website/store-site/index.html "$M/"
+(cd "$M" && python3 -m http.server 8000)
 ```
 
 Then start the launcher with `MANDALA_STORE_URL=http://127.0.0.1:8000`. Only the

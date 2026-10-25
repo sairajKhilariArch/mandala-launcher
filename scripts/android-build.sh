@@ -73,13 +73,8 @@ fi
 echo "==> building libmandala_shell.so for $ABI ($PROFILE)"
 cargo ndk -t "$ABI" build --lib $FLAG -p mandala-shell --features android
 
-echo "==> building modules for $ABI"
-cargo ndk -t "$ABI" build --lib $FLAG \
-  -p app-notes -p app-calculator -p app-terminal \
-  -p app-aegis -p app-vault -p app-localsend \
-  -p app-weather -p app-rss -p app-tasks -p app-reader \
-  -p app-gallery -p app-chat -p app-ai -p app-camera
-
+# Modules publish from their own branches (mod/<id>) and are installed
+# through the in-app store, not bundled into this APK.
 echo "==> building host signing tool"
 cargo build $FLAG -p mandala-sign
 
@@ -102,15 +97,16 @@ fi
 cp "$KEYS/host.pub" "$OUT/mandala-home/trust/host.pub"
 cp themes/*.json "$OUT/mandala-home/themes/"
 
-echo "==> signing + installing modules for the device"
-"$REL/mandala-sign" install --home "$OUT/mandala-home" --key "$KEYS/host.key" \
-  "$OUTLIB"/libapp_notes.so "$OUTLIB"/libapp_calculator.so \
-  "$OUTLIB"/libapp_terminal.so "$OUTLIB"/libapp_aegis.so \
-  "$OUTLIB"/libapp_vault.so "$OUTLIB"/libapp_localsend.so \
-  "$OUTLIB"/libapp_weather.so "$OUTLIB"/libapp_rss.so \
-  "$OUTLIB"/libapp_tasks.so "$OUTLIB"/libapp_reader.so \
-  "$OUTLIB"/libapp_gallery.so "$OUTLIB"/libapp_chat.so \
-  "$OUTLIB"/libapp_ai.so "$OUTLIB"/libapp_camera.so
+# Stage any locally built module libraries (from a mod/<id> checkout that
+# shared this target dir); the device gets the rest from the store.
+set -- "$OUTLIB"/libapp_*.so
+if [ -e "$1" ]; then
+  echo "==> signing + installing locally built modules for the device"
+  "$REL/mandala-sign" install --home "$OUT/mandala-home" --key "$KEYS/host.key" \
+    "$@"
+else
+  echo "==> no locally built module libraries — install modules on-device via the store"
+fi
 
 cat <<EOF
 
