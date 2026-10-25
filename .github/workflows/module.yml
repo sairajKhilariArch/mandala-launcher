@@ -1,28 +1,25 @@
-name: Module release
+name: Publish app-gallery
 
-# One module, one pipeline. Pushing a tag like `app-notes/v1.2.0` builds and
-# signs that single module for both Android ABIs and publishes it to the
-# orphan `store` branch, which GitHub Pages serves as the module catalog.
+# This module lives on its own branch (mod/app-gallery); pushing app-gallery/vX.Y.Z
+# from that branch builds, tests, signs and publishes ONE module:
 #
-# `main` only ever ships the shell (APK/desktop) — module bytes never enter
-# the APK; they are installed at runtime by the in-app store and verified
-# against the release public key baked into the launcher
-# (crates/mandala-shell/release.pub).
+#   git switch mod/app-gallery
+#   git tag app-gallery/v1.0.0 && git push origin mod/app-gallery app-gallery/v1.0.0
 #
-# Release a module:
-#   git tag app-notes/v1.2.0 && git push origin app-notes/v1.2.0
+# Requires the repo secret MANDALA_SIGNING_KEY (the hex Ed25519 secret key
+# whose public half is committed on main as
+# crates/mandala-shell/release.pub). The store serving branch (`store`) and
+# GitHub Pages must be enabled once with Source = branch `store`.
 #
-# Requires the repository secret MANDALA_SIGNING_KEY (hex Ed25519 secret key
-# matching crates/mandala-shell/release.pub) and Pages enabled with
-# Source = branch `store` (created by the first run).
+# Signing binaries come from a `main` checkout (path tooling/) so registry
+# logic and release keys cannot drift per branch; site + module metadata
+# come from the `website` branch.
+
 on:
   push:
-    tags: ["app-*/v*"]
+    tags: ["app-gallery/v*"]
   workflow_dispatch:
     inputs:
-      module:
-        description: "Module id, e.g. app-notes"
-        required: true
       version:
         description: "Version, e.g. 1.2.0"
         required: true
@@ -30,7 +27,7 @@ on:
 permissions:
   contents: write
 
-# Serialize publishes so two module releases cannot race on the store branch.
+# Two module publishes must not race on the store branch.
 concurrency:
   group: store-publish
   cancel-in-progress: false
@@ -43,7 +40,15 @@ jobs:
     name: Build, sign and publish
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4          # this branch's tree (tag tree)
       - uses: actions/checkout@v4
+        with:
+          ref: main                        # mandala-sign + release.pub
+          path: tooling
+      - uses: actions/checkout@v4
+        with:
+          ref: website                     # site + module metadata
+          path: website
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -57,17 +62,13 @@ jobs:
         id: meta
         run: |
           set -euo pipefail
+          MODULE="app-gallery"
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            MODULE="${{ inputs.module }}"
             VERSION="${{ inputs.version }}"
           else
-            REF="${GITHUB_REF_NAME}"      # e.g. app-notes/v1.2.0
-            MODULE="${REF%/v*}"
-            VERSION="${REF##*/v}"
+            VERSION="${GITHUB_REF_NAME##*/v}"   # app-notes/v1.2.0 -> 1.2.0
           fi
-          # Validate before anything is built so a typo cannot half-publish.
-          echo "$MODULE" | grep -Eq '^app-[a-z0-9-]+$' \
-            || { echo "::error::bad module id '$MODULE'"; exit 1; }
+          # Reject lockfile poison before anything is built.
           echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.]+)?$' \
             || { echo "::error::bad version '$VERSION'"; exit 1; }
           echo "module=$MODULE" >> "$GITHUB_OUTPUT"
@@ -85,9 +86,8 @@ jobs:
           echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
           echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME" >> "$GITHUB_ENV"
 
-      - name: Build and sign ${{ steps.meta.outputs.module }}
+      - name: Build, test and sign app-gallery
         env:
-          MODULE: ${{ steps.meta.outputs.module }}
           VERSION: ${{ steps.meta.outputs.version }}
           SIGNING_KEY: ${{ secrets.MANDALA_SIGNING_KEY }}
         run: |
@@ -100,20 +100,32 @@ jobs:
           printf '%s\n' "$SIGNING_KEY" > "$RUNNER_TEMP/host.key"
           trap 'rm -f "$RUNNER_TEMP/host.key"' EXIT
 
-          cargo ndk -t arm64-v8a -t x86_64 build --release --lib -p "$MODULE"
-          cargo build --release -p mandala-sign
+          # Regression gate: the module's own tests must pass on the host
+          # before any artifact is built or published.
+          cargo test --workspace
 
-          # The launcher expects `<id>.so`; cargo names the artifact after the
-          # crate (`libapp_notes.so`), so rename while publishing.
-          CRATE="$(echo "$MODULE" | tr '-' '_')"
-          for pair in "aarch64-linux-android:android-arm64" "x86_64-linux-android:android-x86_64"; do
-            TARGET="${pair%%:*}"
-            ABI="${pair##*:}"
-            OUT="publish/modules/$ABI"
-            mkdir -p "$OUT"
-            cp "target/$TARGET/release/lib${CRATE}.so" "$OUT/$MODULE.so"
-            ./target/release/mandala-sign sign --key "$RUNNER_TEMP/host.key" "$OUT/$MODULE.so"
-            printf '%s\n' "$VERSION" > "$OUT/$MODULE.so.ver"
+          # Android ABIs via cargo-ndk, plus the Linux desktop host ABI.
+          cargo ndk -t arm64-v8a -t x86_64 build --release --lib -p "app-gallery"
+          cargo build --release --lib -p "app-gallery"
+
+          # Sign binaries from `main`, not this branch.
+          (cd tooling && cargo build --release -p mandala-sign)
+          TOOL=tooling/target/release/mandala-sign
+
+          CRATE="app_gallery"
+          PUB=tooling/crates/mandala-shell/release.pub
+          PUBLISH=publish/modules
+          mkdir -p $PUBLISH/android-arm64 $PUBLISH/android-x86_64 $PUBLISH/linux-x86_64
+          # The launcher resolves `<id>.so`; cargo emits `lib<crate>.so`.
+          cp "target/aarch64-linux-android/release/lib${CRATE}.so" "$PUBLISH/android-arm64/app-gallery.so"
+          cp "target/x86_64-linux-android/release/lib${CRATE}.so"  "$PUBLISH/android-x86_64/app-gallery.so"
+          cp "target/release/lib${CRATE}.so"                       "$PUBLISH/linux-x86_64/app-gallery.so"
+
+          for f in $PUBLISH/*/*.so; do
+            "$TOOL" sign --key "$RUNNER_TEMP/host.key" "$f"
+            "$TOOL" verify --pub "$PUB" "$f" \
+              || { echo "::error::secret key does not match the committed release.pub"; exit 1; }
+            printf '%s\n' "$VERSION" > "$f.ver"
           done
 
       - name: Publish to the store branch
@@ -130,30 +142,31 @@ jobs:
           git remote add origin \
             "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git"
           if git fetch -q origin store; then
-            # FETCH_HEAD is unconditional; remote-tracking refs are not.
             git checkout -q -B store FETCH_HEAD
           else
-            # First publish: the orphan store branch has no history.
+            # First publish ever: the store branch has no history yet.
             git checkout -q --orphan store
+            git rm -q -rf .
           fi
 
-          mkdir -p modules/android-arm64 modules/android-x86_64 registry
-          for ABI in android-arm64 android-x86_64; do
-            cp "$SRC"/publish/modules/"$ABI"/* "modules/$ABI/"
-          done
-          cp "$SRC"/store-site/index.html .
+          mkdir -p modules registry
+          cp -r "$SRC/publish/modules/"* modules/
+          cp "$SRC/website/store-site/index.html" ./index.html
 
-          # Regenerate the catalog from everything on the branch (not just this
-          # module), verifying each signature against the committed key so a
-          # mismatched MANDALA_SIGNING_KEY fails here rather than on devices.
-          cd "$SRC"
-          for ABI in android-arm64 android-x86_64; do
-            ./target/release/mandala-sign registry \
-              --abi "$ABI" \
-              --dir "$WORK/modules/$ABI" \
-              --manifests store/manifests \
-              --out "$WORK/registry/$ABI.json" \
-              --pub crates/mandala-shell/release.pub
+          # Regenerate each ABI catalog whose directory has any module
+          # bytes — not just this module — so the published catalog always
+          # covers every module and ABI on the branch.
+          for ABI in android-arm64 android-x86_64 linux-x86_64; do
+            DIR="$WORK/modules/$ABI"
+            if [ -n "$(ls -A "$DIR" 2>/dev/null)" ]; then
+              (cd "$SRC" && tooling/target/release/mandala-sign registry \
+                --abi "$ABI" \
+                --dir "$DIR" \
+                --manifests "$SRC/website/store/manifests" \
+                --out "$WORK/registry/$ABI.json" \
+                --pub "$SRC/tooling/crates/mandala-shell/release.pub") \
+                || { echo "::error::registry generation failed for $ABI"; exit 1; }
+            fi
           done
 
           cd "$WORK"
@@ -166,6 +179,8 @@ jobs:
           else
             git commit -q -m "publish $MODULE $VERSION"
             git push -q origin store
+            echo "store branch updated: $MODULE $VERSION"
+            ls modules/*/ registry/
           fi
 
       - uses: actions/upload-artifact@v4

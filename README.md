@@ -1,56 +1,18 @@
-<div align="center">
+# mod/app-gallery
 
-# ☸️ Mandala Launcher (`mandala-shell`)
+Autonomous branch for the `app-gallery` Mandala module.
 
-**A Non-Attentional, Microkernel-Secured, Modular Tri-Panel Mobile Shell**
+- Workspace: `crates/mandala-module-api` + `modules/app-gallery` only. Compiles and
+  tests standalone; the launcher shell lives on the `main` branch.
+- Release from this branch
 
-*Engineered to dismantle mobile dopamine loops, prioritize intentional computing, and deliver high-performance user experience.*
+      git switch mod/app-gallery
+      git tag app-gallery/vX.Y.Z && git push origin mod/app-gallery app-gallery/vX.Y.Z
 
-[![Language: Rust](https://img.shields.io/badge/Core-Rust_1.75+-orange?style=flat-square&logo=rust)](https://www.rust-lang.org/)
-[![UI Framework: Slint](https://img.shields.io/badge/UI-Slint_1.4+-blue?style=flat-square)](https://slint.dev/)
-[![Architecture: Microkernel IPC](https://img.shields.io/badge/Architecture-Microkernel_IPC-purple?style=flat-square)](#-microkernel-ipc-bus--security)
-[![License: MIT/Apache-2.0](https://img.shields.io/badge/License-MIT%2FApache--2.0-green?style=flat-square)](#-license)
-
-[Features](#-key-features) •
-[Ergonomic Framework](#-ergonomic--behavioral-ux-framework) •
-[Tech Stack](#-technology-stack) •
-[Architecture](#-system-architecture) •
-[Getting Started](#-getting-started) •
-[Theme System](#-dynamic-theme-engine)
-
-</div>
-
----
-
-## 📖 Overview
-
-Modern smartphone interfaces are engineered around engagement optimization—leveraging saturated icons, notification badges, unpredictable feeds, and high-frequency animations to capture user focus.
-
-**Mandala Launcher (`mandala-shell`)** is a radical departure from commercial mobile launcher design. Built on a pure **Rust** backend and rendered with the **Slint UI** framework, Mandala transforms your home screen into a static, text-first, intent-driven canvas. 
-
-By applying **Fitts’s Law** to spatial ergonomics and decoupling application execution into a **hypervisor-style microkernel architecture**, Mandala provides a quiet, fast and secure mobile workspace.
-
----
-
-## 🌟 Key Features
-
-* 📐 **Tri-Panel Spatial Canvas:** Eliminates deep app drawer stacks by dividing the screen into three persistent zones:
-  * **Panel A (Center Anchor):** Text-first command terminal, search bar, and primary intent utilities.
-  * **Panel B (Left Context Drawer):** Passive information retrieval (RSS, Weather, Tasks).
-  * **Panel C (Right Utility Drawer):** Security tools, local syncing, and diagnostics (2FA, KeePass, LocalSend).
-* ⚡ **Rust + Slint Native Performance:** Zero garbage-collection stutters and native startup. Measured cold-boot and memory numbers — including the gap to the original 20 ms / 5 MB targets — are in [`docs/performance.md`](docs/performance.md).
-* 🛡️ **Microkernel IPC Bus:** Hypervisor-style Access Control Lists (ACL) mediate every module-to-module and module-to-host call, and Ed25519 signatures decide which libraries may load at all. Modules are `dlopen`ed into the host process, so this is a reference monitor with a signed module set — **not** OS memory or syscall isolation. See [README_right_now.md](README_right_now.md).
-* 🎨 **Dynamic Theme Engine:** Hot-swappable JSON design manifests supporting **Minimalist OLED**, **Cartoonish Cel-Shaded**, and **Retro Terminal** themes.
-* 🧩 **Module store (shell-only `main`):** The launcher ships as a shell. Each module is built, signed and published on its own tag (`app-notes/v1.2.0`) by [`.github/workflows/module.yml`](.github/workflows/module.yml) to the orphan `store` branch GitHub Pages serves. The in-app Store downloads a module, checks its size, SHA-256, ELF ABI and Ed25519 signature against a key baked into the launcher, then installs it into app-private storage — no APK rebuild. See [`docs/module-store.md`](docs/module-store.md).
-* 🌿 **Independent module releases:** Every module has its own release pipeline and version, so a fix in one slot never drags the rest of the launcher through a shell release.
-
----
-
-## 🖐 Ergonomic & Behavioral UX Framework
-
-### Cognitive Modes: "Knowing" vs. "Unknowing" Actions
-
-Mandala partitions phone usage into two operational modes to eliminate mindless swiping:
-
-1. **Intentional (Knowing) Usage:** High-priority, purposeful actions (e.g., launching terminal, searching an app, or taking a quick note) are placed in the **Natural Thumb Reach Zone (Bottom 30%)**.
-2. **Impulsive (Unknowing) Usage:** Passive checking behavior is suppressed by placing information feeds behind deliberate lateral swipe gestures in the **Non-Dominant Stretch Zones**.
+  `.github/workflows/module.yml` then runs `cargo test --workspace`, builds the
+  module for `android-arm64`, `android-x86_64` and (host) `linux-x86_64`,
+  signs each `app-gallery.so` with `MANDALA_SIGNING_KEY`, verifies the signatures
+  against main's committed `release.pub`, regenerates `registry/<abi>.json`
+  and pushes the results to the orphan `store` branch (GitHub Pages).
+- Module metadata (label, description) lives on the `website` branch:
+  `store/manifests/app-gallery.json`.
