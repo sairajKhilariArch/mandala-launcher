@@ -65,25 +65,54 @@ pub struct Chat {
 
 impl Chat {
     pub fn new() -> Self {
-        Self { data_dir: PathBuf::new(), session: None, rooms: Vec::new(), since: String::new(), txn: 0 }
+        Self {
+            data_dir: PathBuf::new(),
+            session: None,
+            rooms: Vec::new(),
+            since: String::new(),
+            txn: 0,
+        }
     }
 
     /// `GET <hs>/_matrix/client/v3/...` with the bearer token.
     fn get(&self, hs: &str, path: &str, token: &str) -> Result<serde_json::Value, String> {
-        let url = format!("{}/_matrix/client/v3/{}", hs.trim_end_matches('/'), path.trim_start_matches('/'));
+        let url = format!(
+            "{}/_matrix/client/v3/{}",
+            hs.trim_end_matches('/'),
+            path.trim_start_matches('/')
+        );
         let body = http(&url, "GET", Some(token), None, MAX_BODY)?;
         serde_json::from_str(&body).map_err(|e| format!("homeserver response: {e}"))
     }
 
     /// `PUT` a JSON body, returning the parsed response.
-    fn put(&self, hs: &str, path: &str, token: &str, payload: &serde_json::Value) -> Result<serde_json::Value, String> {
-        let url = format!("{}/_matrix/client/v3/{}", hs.trim_end_matches('/'), path.trim_start_matches('/'));
+    fn put(
+        &self,
+        hs: &str,
+        path: &str,
+        token: &str,
+        payload: &serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
+        let url = format!(
+            "{}/_matrix/client/v3/{}",
+            hs.trim_end_matches('/'),
+            path.trim_start_matches('/')
+        );
         let body = http(&url, "PUT", Some(token), Some(payload), MAX_BODY)?;
         serde_json::from_str(&body).map_err(|e| format!("homeserver response: {e}"))
     }
 
-    fn post(&self, hs: &str, path: &str, payload: &serde_json::Value) -> Result<serde_json::Value, String> {
-        let url = format!("{}/_matrix/client/v3/{}", hs.trim_end_matches('/'), path.trim_start_matches('/'));
+    fn post(
+        &self,
+        hs: &str,
+        path: &str,
+        payload: &serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
+        let url = format!(
+            "{}/_matrix/client/v3/{}",
+            hs.trim_end_matches('/'),
+            path.trim_start_matches('/')
+        );
         let body = http(&url, "POST", None, Some(payload), MAX_BODY)?;
         serde_json::from_str(&body).map_err(|e| format!("homeserver response: {e}"))
     }
@@ -100,10 +129,18 @@ impl Chat {
             "initial_device_display_name": "Mandala launcher",
         });
         let resp = self.post(&hs, "login", &payload)?;
-        let token = resp["access_token"].as_str().ok_or("login response had no access_token")?.to_string();
+        let token = resp["access_token"]
+            .as_str()
+            .ok_or("login response had no access_token")?
+            .to_string();
         let user_id = resp["user_id"].as_str().unwrap_or_default().to_string();
         let device_id = resp["device_id"].as_str().unwrap_or_default().to_string();
-        let session = Session { homeserver: hs, user: user.trim().to_string(), user_id: user_id.clone(), access_token: token };
+        let session = Session {
+            homeserver: hs,
+            user: user.trim().to_string(),
+            user_id: user_id.clone(),
+            access_token: token,
+        };
         save_session(&self.data_dir, &session)?;
         self.session = Some(session);
         self.since.clear();
@@ -123,7 +160,11 @@ impl Chat {
     /// One `/sync` poll, refreshing the cached room list.
     fn sync_once(&mut self) -> Result<(), String> {
         let session = self.session.as_ref().ok_or("not logged in")?.clone();
-        let since = if self.since.is_empty() { String::new() } else { format!("&since={}", urlencode(&self.since)) };
+        let since = if self.since.is_empty() {
+            String::new()
+        } else {
+            format!("&since={}", urlencode(&self.since))
+        };
         let path = format!("sync?timeout=0&set_presence=offline{since}");
         let resp = self.get(&session.homeserver, &path, &session.access_token)?;
         if let Some(next) = resp["next_batch"].as_str() {
@@ -141,12 +182,20 @@ impl Chat {
                             if e["type"] != "m.room.name" {
                                 return None;
                             }
-                            e["content"]["name"].as_str().filter(|n| !n.trim().is_empty()).map(str::to_string)
+                            e["content"]["name"]
+                                .as_str()
+                                .filter(|n| !n.trim().is_empty())
+                                .map(str::to_string)
                         })
                     })
                     .unwrap_or_else(|| room_id.clone());
                 let (last_body, last_sender) = timeline_latest(&data["timeline"]);
-                rooms.push(Room { id: room_id.clone(), name, last_body, last_sender });
+                rooms.push(Room {
+                    id: room_id.clone(),
+                    name,
+                    last_body,
+                    last_sender,
+                });
             }
         }
         rooms.sort_by_key(|r| r.name.to_lowercase());
@@ -161,8 +210,18 @@ impl Chat {
         }
         let mut out = format!("ROOMS ({} — polled just now)\n\n", self.rooms.len());
         for (i, r) in self.rooms.iter().enumerate() {
-            let preview = if r.last_body.is_empty() { String::new() } else { format!(" — {}: {}", short(&r.last_sender), clip(&r.last_body, 40)) };
-            out.push_str(&format!("{:>2}. {}{} [{}]\n", i + 1, clip(&r.name, 24), preview, clip(&r.id, 12)));
+            let preview = if r.last_body.is_empty() {
+                String::new()
+            } else {
+                format!(" — {}: {}", short(&r.last_sender), clip(&r.last_body, 40))
+            };
+            out.push_str(&format!(
+                "{:>2}. {}{} [{}]\n",
+                i + 1,
+                clip(&r.name, 24),
+                preview,
+                clip(&r.id, 12)
+            ));
         }
         out.push_str("\nread <n>   history of room n\nsay <n> <text>   send as you\n");
         Ok(out)
@@ -173,9 +232,9 @@ impl Chat {
         if let Ok(n) = arg.parse::<usize>() {
             return self.rooms.get(n.saturating_sub(1));
         }
-        self.rooms
-            .iter()
-            .find(|r| r.id == arg || r.id.eq_ignore_ascii_case(arg) || r.name.eq_ignore_ascii_case(arg))
+        self.rooms.iter().find(|r| {
+            r.id == arg || r.id.eq_ignore_ascii_case(arg) || r.name.eq_ignore_ascii_case(arg)
+        })
     }
 
     fn read(&mut self, arg: &str) -> Result<String, String> {
@@ -187,8 +246,15 @@ impl Chat {
         if arg.is_empty() {
             return Err("usage: read <n>".into());
         }
-        let room = self.resolve_room(arg).ok_or_else(|| format!("no room `{arg}` — run `rooms` first"))?.clone();
-        let path = format!("rooms/{}/messages?dir=b&limit={}", urlencode(&room.id), MAX_HISTORY);
+        let room = self
+            .resolve_room(arg)
+            .ok_or_else(|| format!("no room `{arg}` — run `rooms` first"))?
+            .clone();
+        let path = format!(
+            "rooms/{}/messages?dir=b&limit={}",
+            urlencode(&room.id),
+            MAX_HISTORY
+        );
         let resp = self.get(&session.homeserver, &path, &session.access_token)?;
         let mut lines = Vec::new();
         if let Some(chunk) = resp["chunk"].as_array() {
@@ -207,7 +273,12 @@ impl Chat {
             }
         }
         lines.reverse();
-        Ok(format!("HISTORY — {} ({})\n\n{}\n", room.name, clip(&room.id, 12), lines.join("\n")))
+        Ok(format!(
+            "HISTORY — {} ({})\n\n{}\n",
+            room.name,
+            clip(&room.id, 12),
+            lines.join("\n")
+        ))
     }
 
     fn say(&mut self, arg: &str) -> Result<String, String> {
@@ -216,27 +287,45 @@ impl Chat {
         }
         let session = self.session.clone().ok_or("not logged in")?;
         let arg = arg.trim();
-        let (who, text) = arg.split_once(char::is_whitespace).ok_or("usage: say <n|me> <text>")?;
+        let (who, text) = arg
+            .split_once(char::is_whitespace)
+            .ok_or("usage: say <n|me> <text>")?;
         let text = text.trim();
         if text.is_empty() {
             return Err("nothing to send".into());
         }
         let room_id = if who == "me" {
-            self.rooms.first().ok_or("no rooms — run `rooms` first")?.id.clone()
+            self.rooms
+                .first()
+                .ok_or("no rooms — run `rooms` first")?
+                .id
+                .clone()
         } else {
-            self.resolve_room(who).ok_or_else(|| format!("no room `{who}` — run `rooms` first"))?.id.clone()
+            self.resolve_room(who)
+                .ok_or_else(|| format!("no room `{who}` — run `rooms` first"))?
+                .id
+                .clone()
         };
         self.txn += 1;
         let txn = format!("mandala-{}-{}", std::process::id(), self.txn);
         let payload = serde_json::json!({ "msgtype": "m.text", "body": text });
-        let path = format!("rooms/{}/send/m.room.message/{}", urlencode(&room_id), urlencode(&txn));
+        let path = format!(
+            "rooms/{}/send/m.room.message/{}",
+            urlencode(&room_id),
+            urlencode(&txn)
+        );
         self.put(&session.homeserver, &path, &session.access_token, &payload)?;
         Ok(format!("sent to {}: {}", clip(&room_id, 12), text))
     }
 
     fn status(&self) -> String {
         match &self.session {
-            Some(s) => format!("homeserver  {}\nuser        {}\nrooms       {} cached", s.homeserver, s.user_id, self.rooms.len()),
+            Some(s) => format!(
+                "homeserver  {}\nuser        {}\nrooms       {} cached",
+                s.homeserver,
+                s.user_id,
+                self.rooms.len()
+            ),
             None => "not logged in (see `help`)".into(),
         }
     }
@@ -296,12 +385,22 @@ impl Chat {
         let token = token.to_string();
         // Verify the token against whoami before saving it.
         let probe = self.get(&hs, "account/whoami", &token)?;
-        let user_id = probe["user_id"].as_str().ok_or("token rejected (no user_id)")?.to_string();
-        let session = Session { homeserver: hs, user: user.trim().to_string(), user_id: user_id.clone(), access_token: token };
+        let user_id = probe["user_id"]
+            .as_str()
+            .ok_or("token rejected (no user_id)")?
+            .to_string();
+        let session = Session {
+            homeserver: hs,
+            user: user.trim().to_string(),
+            user_id: user_id.clone(),
+            access_token: token,
+        };
         save_session(&self.data_dir, &session)?;
         self.session = Some(session);
         self.since.clear();
-        Ok(format!("token accepted for {user_id}; saved to session.json."))
+        Ok(format!(
+            "token accepted for {user_id}; saved to session.json."
+        ))
     }
 }
 
@@ -330,7 +429,10 @@ fn timeline_latest(timeline: &serde_json::Value) -> (String, String) {
     if let Some(events) = timeline["events"].as_array() {
         for ev in events.iter().rev() {
             if ev["type"] == "m.room.message" {
-                let body = ev["content"]["body"].as_str().unwrap_or_default().to_string();
+                let body = ev["content"]["body"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .to_string();
                 let sender = ev["sender"].as_str().unwrap_or_default().to_string();
                 if !body.is_empty() {
                     return (body, sender);
@@ -356,15 +458,27 @@ fn normalize_homeserver(hs: &str) -> Result<String, String> {
 }
 
 /// One HTTP call. `token` adds a bearer header; `body` switches to POST/PUT.
-pub fn http(url: &str, method: &str, token: Option<&str>, body: Option<&serde_json::Value>, max: usize) -> Result<String, String> {
+pub fn http(
+    url: &str,
+    method: &str,
+    token: Option<&str>,
+    body: Option<&serde_json::Value>,
+    max: usize,
+) -> Result<String, String> {
     let response = match (method, body) {
         ("GET", _) | (_, None) => {
             if method != "GET" {
                 return Err(format!("{method} needs a JSON body"));
             }
-            let request = ureq::get(url).header("Accept", "application/json").config().timeout_global(Some(TIMEOUT)).build();
+            let request = ureq::get(url)
+                .header("Accept", "application/json")
+                .config()
+                .timeout_global(Some(TIMEOUT))
+                .build();
             match token {
-                Some(t) => request.header("Authorization", &format!("Bearer {t}")).call(),
+                Some(t) => request
+                    .header("Authorization", &format!("Bearer {t}"))
+                    .call(),
                 None => request.call(),
             }
         }
@@ -396,7 +510,10 @@ pub fn http(url: &str, method: &str, token: Option<&str>, body: Option<&serde_js
             .unwrap_or_default();
         return Err(format!("{method} {url}: HTTP {status}{m}"));
     }
-    let text = response.body_mut().read_to_string().map_err(|e| format!("{method} {url}: {e}"))?;
+    let text = response
+        .body_mut()
+        .read_to_string()
+        .map_err(|e| format!("{method} {url}: {e}"))?;
     if text.len() > max {
         return Err(format!("{method} {url}: response larger than {max} bytes"));
     }
@@ -407,10 +524,19 @@ pub fn http(url: &str, method: &str, token: Option<&str>, body: Option<&serde_js
 /// secret falling back to an environment variable. The module never reads a
 /// terminal — it runs on the launcher's UI path, where blocking on stdin would
 /// freeze the shell (and there is no tty at all on Android).
-fn parse_auth_args<'a>(rest: &'a str, secret_env: &str) -> Result<(&'a str, &'a str, String), String> {
-    let mut parts = rest.splitn(3, char::is_whitespace).filter(|p| !p.is_empty());
-    let hs = parts.next().ok_or_else(|| "usage: <homeserver-url> <user> [secret]".to_string())?;
-    let user = parts.next().ok_or_else(|| "usage: <homeserver-url> <user> [secret]".to_string())?;
+fn parse_auth_args<'a>(
+    rest: &'a str,
+    secret_env: &str,
+) -> Result<(&'a str, &'a str, String), String> {
+    let mut parts = rest
+        .splitn(3, char::is_whitespace)
+        .filter(|p| !p.is_empty());
+    let hs = parts
+        .next()
+        .ok_or_else(|| "usage: <homeserver-url> <user> [secret]".to_string())?;
+    let user = parts
+        .next()
+        .ok_or_else(|| "usage: <homeserver-url> <user> [secret]".to_string())?;
     if let Some(secret) = parts.next() {
         return Ok((hs, user, secret.trim().to_string()));
     }
@@ -426,7 +552,9 @@ pub fn urlencode(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for b in s.bytes() {
         match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => out.push(b as char),
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(b as char)
+            }
             _ => out.push_str(&format!("%{b:02X}")),
         }
     }
@@ -434,14 +562,22 @@ pub fn urlencode(s: &str) -> String {
 }
 
 fn short(sender: &str) -> String {
-    sender.trim_start_matches('@').split(':').next().unwrap_or(sender).to_string()
+    sender
+        .trim_start_matches('@')
+        .split(':')
+        .next()
+        .unwrap_or(sender)
+        .to_string()
 }
 
 fn clip(s: &str, max: usize) -> String {
     if s.chars().count() <= max {
         s.to_string()
     } else {
-        format!("{}…", s.chars().take(max.saturating_sub(1)).collect::<String>())
+        format!(
+            "{}…",
+            s.chars().take(max.saturating_sub(1)).collect::<String>()
+        )
     }
 }
 
@@ -460,7 +596,12 @@ fn session_path(data_dir: &std::path::Path) -> PathBuf {
 fn write_private(path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()> {
     use std::io::Write;
     use std::os::unix::fs::OpenOptionsExt;
-    let mut f = std::fs::OpenOptions::new().write(true).create(true).truncate(true).mode(0o600).open(path)?;
+    let mut f = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(path)?;
     f.write_all(bytes)
 }
 
@@ -559,7 +700,11 @@ mod tests {
     fn ready() -> (tempfile::TempDir, Chat) {
         let dir = tempfile::tempdir().unwrap();
         let mut c = Chat::new();
-        c.init(&ModuleContext { data_dir: dir.path().to_string_lossy().into(), host: Host::detached("app-chat") }).unwrap();
+        c.init(&ModuleContext {
+            data_dir: dir.path().to_string_lossy().into(),
+            host: Host::detached("app-chat"),
+        })
+        .unwrap();
         (dir, c)
     }
 
@@ -588,7 +733,9 @@ mod tests {
             for _ in 0..64 {
                 if let Ok((mut sock, _)) = listener.accept() {
                     let request = read_request(&mut sock);
-                    seen.lock().unwrap().push(String::from_utf8_lossy(&request).into_owned());
+                    seen.lock()
+                        .unwrap()
+                        .push(String::from_utf8_lossy(&request).into_owned());
                     let body = sink.lock().unwrap().pop().unwrap_or_else(|| "{}".into());
                     let response = format!(
                         "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
@@ -613,8 +760,14 @@ mod tests {
 
     #[test]
     fn homeserver_and_path_building() {
-        assert_eq!(normalize_homeserver(" https://matrix.example.org/ ").unwrap(), "https://matrix.example.org");
-        assert!(normalize_homeserver("matrix.example.org").is_err(), "scheme required");
+        assert_eq!(
+            normalize_homeserver(" https://matrix.example.org/ ").unwrap(),
+            "https://matrix.example.org"
+        );
+        assert!(
+            normalize_homeserver("matrix.example.org").is_err(),
+            "scheme required"
+        );
         assert!(normalize_homeserver("").is_err());
         assert_eq!(urlencode("!room:example.org"), "%21room%3Aexample.org");
     }
@@ -626,15 +779,26 @@ mod tests {
         std::env::remove_var(TOKEN_ENV);
         let out = c.execute("login https://matrix.example.org ada");
         assert!(!out.ok);
-        assert!(out.text.contains(PASSWORD_ENV), "must name the env var: {}", out.text);
+        assert!(
+            out.text.contains(PASSWORD_ENV),
+            "must name the env var: {}",
+            out.text
+        );
         let out = c.execute("token https://matrix.example.org ada");
         assert!(!out.ok && out.text.contains(TOKEN_ENV), "{}", out.text);
 
         // Environment fallback works without any terminal.
         std::env::set_var(PASSWORD_ENV, "from-env");
-        let (hs, user, secret) = parse_auth_args("https://matrix.example.org ada", PASSWORD_ENV).unwrap();
-        assert_eq!((hs, user, secret.as_str()), ("https://matrix.example.org", "ada", "from-env"));
-        assert!(!parse_auth_args("https://matrix.example.org", PASSWORD_ENV).is_ok(), "user required");
+        let (hs, user, secret) =
+            parse_auth_args("https://matrix.example.org ada", PASSWORD_ENV).unwrap();
+        assert_eq!(
+            (hs, user, secret.as_str()),
+            ("https://matrix.example.org", "ada", "from-env")
+        );
+        assert!(
+            !parse_auth_args("https://matrix.example.org", PASSWORD_ENV).is_ok(),
+            "user required"
+        );
         std::env::remove_var(PASSWORD_ENV);
     }
 
@@ -643,9 +807,17 @@ mod tests {
         let (_d, mut c) = ready();
         // `launch` must succeed even signed out: it is the slot's first view.
         let launch = c.handle("launch", "");
-        assert!(launch.ok && launch.text.contains("signed out"), "{}", launch.text);
+        assert!(
+            launch.ok && launch.text.contains("signed out"),
+            "{}",
+            launch.text
+        );
         let out = c.execute("rooms");
-        assert!(!out.ok && out.text.contains("not logged in"), "{}", out.text);
+        assert!(
+            !out.ok && out.text.contains("not logged in"),
+            "{}",
+            out.text
+        );
         let out = c.execute("say 1 hi");
         assert!(!out.ok);
         assert!(c.execute("status").text.contains("not logged in"));
@@ -656,11 +828,21 @@ mod tests {
     #[test]
     fn login_saves_a_0600_session_and_reloads() {
         let (dir, mut c) = ready();
-        let server = serve(vec![r#"{"user_id":"@ada:example.org","access_token":"tok123","device_id":"DEV"}"#.into()]);
-        let out = ok(&mut c, &format!("login http://127.0.0.1:{} ada hunter2", server.port));
+        let server = serve(vec![
+            r#"{"user_id":"@ada:example.org","access_token":"tok123","device_id":"DEV"}"#.into(),
+        ]);
+        let out = ok(
+            &mut c,
+            &format!("login http://127.0.0.1:{} ada hunter2", server.port),
+        );
         assert!(out.contains("@ada:example.org"), "{out}");
         assert!(
-            server.requests.lock().unwrap().iter().any(|r| r.contains("hunter2")),
+            server
+                .requests
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|r| r.contains("hunter2")),
             "the POST body must reach the server: {:?}",
             server.requests.lock().unwrap()
         );
@@ -670,28 +852,49 @@ mod tests {
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let mode = std::fs::metadata(dir.path().join("session.json")).unwrap().permissions().mode();
-            assert_eq!(mode & 0o777, 0o600, "session must not be group/world readable");
+            let mode = std::fs::metadata(dir.path().join("session.json"))
+                .unwrap()
+                .permissions()
+                .mode();
+            assert_eq!(
+                mode & 0o777,
+                0o600,
+                "session must not be group/world readable"
+            );
         }
 
         let mut second = Chat::new();
         second
-            .init(&ModuleContext { data_dir: dir.path().to_string_lossy().into(), host: Host::detached("app-chat") })
+            .init(&ModuleContext {
+                data_dir: dir.path().to_string_lossy().into(),
+                host: Host::detached("app-chat"),
+            })
             .unwrap();
         assert!(second.session.is_some(), "session reloads across restarts");
 
         ok(&mut c, "logout");
-        assert!(!dir.path().join("session.json").exists(), "logout wipes the token");
+        assert!(
+            !dir.path().join("session.json").exists(),
+            "logout wipes the token"
+        );
         assert!(c.session.is_none());
     }
 
     #[test]
     fn bad_login_is_rejected_without_saving() {
         let (dir, mut c) = ready();
-        let server = serve(vec![r#"{"errcode":"M_FORBIDDEN","error":"Bad password"}"#.into()]);
-        let out = c.execute(&format!("login http://127.0.0.1:{} ada wrong-password", server.port));
+        let server = serve(vec![
+            r#"{"errcode":"M_FORBIDDEN","error":"Bad password"}"#.into()
+        ]);
+        let out = c.execute(&format!(
+            "login http://127.0.0.1:{} ada wrong-password",
+            server.port
+        ));
         assert!(!out.ok, "{}", out.text);
-        assert!(!dir.path().join("session.json").exists(), "failed login must not persist a token");
+        assert!(
+            !dir.path().join("session.json").exists(),
+            "failed login must not persist a token"
+        );
     }
 
     #[test]
@@ -713,18 +916,32 @@ mod tests {
         login_direct(&mut c, &format!("http://127.0.0.1:{}", server.port));
 
         let rooms = ok(&mut c, "rooms");
-        assert!(rooms.contains("Team") && rooms.contains("deploy done"), "{rooms}");
+        assert!(
+            rooms.contains("Team") && rooms.contains("deploy done"),
+            "{rooms}"
+        );
 
         let history = ok(&mut c, "read 1");
         assert!(history.contains("bob: deploy done"), "{history}");
-        assert!(history.contains("ada: nice!"), "chronological order expected: {history}");
-        assert!(history.contains("[m.image] (not rendered)"), "non-text events are noted, not rendered: {history}");
+        assert!(
+            history.contains("ada: nice!"),
+            "chronological order expected: {history}"
+        );
+        assert!(
+            history.contains("[m.image] (not rendered)"),
+            "non-text events are noted, not rendered: {history}"
+        );
         assert!(!c.execute("read 9").ok, "unknown room index");
 
         let sent = ok(&mut c, "say 1 ship it");
         assert!(sent.contains("ship it"), "{sent}");
         assert!(
-            server.requests.lock().unwrap().iter().any(|r| r.contains("ship it")),
+            server
+                .requests
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|r| r.contains("ship it")),
             "the message body must reach the server: {:?}",
             server.requests.lock().unwrap()
         );

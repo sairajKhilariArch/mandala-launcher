@@ -73,14 +73,27 @@ impl MicrokernelIpcBroker {
     /// Returns the broker and the receiving end consumed by the router.
     pub fn new(buffer_size: usize, acl: AccessControlList) -> (Self, mpsc::Receiver<IpcEnvelope>) {
         let (tx, rx) = mpsc::channel(buffer_size.max(1));
-        (Self { acl, tx, next_id: AtomicU64::new(1) }, rx)
+        (
+            Self {
+                acl,
+                tx,
+                next_id: AtomicU64::new(1),
+            },
+            rx,
+        )
     }
 
     pub fn acl(&self) -> &AccessControlList {
         &self.acl
     }
 
-    pub fn envelope(&self, sender: &str, target: &str, action: &str, data_json: &str) -> IpcEnvelope {
+    pub fn envelope(
+        &self,
+        sender: &str,
+        target: &str,
+        action: &str,
+        data_json: &str,
+    ) -> IpcEnvelope {
         IpcEnvelope {
             message_id: format!("m{}", self.next_id.fetch_add(1, Ordering::Relaxed)),
             sender_module: sender.to_string(),
@@ -104,13 +117,18 @@ impl MicrokernelIpcBroker {
     /// Async dispatch (waits for queue space).
     pub async fn dispatch(&self, envelope: IpcEnvelope) -> Result<()> {
         self.check(&envelope)?;
-        self.tx.send(envelope).await.map_err(|_| MandalaError::IpcChannel)
+        self.tx
+            .send(envelope)
+            .await
+            .map_err(|_| MandalaError::IpcChannel)
     }
 
     /// Non-blocking dispatch, safe to call from FFI callbacks and UI threads.
     pub fn try_dispatch(&self, envelope: IpcEnvelope) -> Result<()> {
         self.check(&envelope)?;
-        self.tx.try_send(envelope).map_err(|_| MandalaError::IpcChannel)
+        self.tx
+            .try_send(envelope)
+            .map_err(|_| MandalaError::IpcChannel)
     }
 }
 
@@ -121,9 +139,15 @@ mod tests {
     #[tokio::test]
     async fn host_and_allowed_routes_pass() {
         let (b, mut rx) = MicrokernelIpcBroker::new(8, AccessControlList::default_policy());
-        b.dispatch(b.envelope(HOST, "app-notes", "launch", "")).await.unwrap();
-        b.dispatch(b.envelope("app-calculator", "app-notes", "append", "x")).await.unwrap();
-        b.dispatch(b.envelope("app-notes", HOST, "reply", "{}")).await.unwrap();
+        b.dispatch(b.envelope(HOST, "app-notes", "launch", ""))
+            .await
+            .unwrap();
+        b.dispatch(b.envelope("app-calculator", "app-notes", "append", "x"))
+            .await
+            .unwrap();
+        b.dispatch(b.envelope("app-notes", HOST, "reply", "{}"))
+            .await
+            .unwrap();
         assert_eq!(rx.recv().await.unwrap().target_module, "app-notes");
         assert_eq!(rx.recv().await.unwrap().sender_module, "app-calculator");
         assert_eq!(rx.recv().await.unwrap().target_module, HOST);
@@ -132,10 +156,14 @@ mod tests {
     #[tokio::test]
     async fn unlisted_route_is_denied() {
         let (b, _rx) = MicrokernelIpcBroker::new(8, AccessControlList::default_policy());
-        let err = b.dispatch(b.envelope("app-notes", "app-calculator", "eval", "1")).await;
+        let err = b
+            .dispatch(b.envelope("app-notes", "app-calculator", "eval", "1"))
+            .await;
         assert!(matches!(err, Err(MandalaError::AclViolation { .. })));
         // Unknown sender is denied too.
-        assert!(b.try_dispatch(b.envelope("evil", "app-notes", "append", "x")).is_err());
+        assert!(b
+            .try_dispatch(b.envelope("evil", "app-notes", "append", "x"))
+            .is_err());
     }
 
     #[test]
@@ -151,6 +179,9 @@ mod tests {
     #[test]
     fn message_ids_are_unique() {
         let (b, _rx) = MicrokernelIpcBroker::new(1, AccessControlList::new());
-        assert_ne!(b.envelope(HOST, "a", "x", "").message_id, b.envelope(HOST, "a", "x", "").message_id);
+        assert_ne!(
+            b.envelope(HOST, "a", "x", "").message_id,
+            b.envelope(HOST, "a", "x", "").message_id
+        );
     }
 }

@@ -33,7 +33,11 @@ struct Args {
 }
 
 fn parse_args() -> Result<Args, String> {
-    let mut args = Args { iters: 50, home: None, json: false };
+    let mut args = Args {
+        iters: 50,
+        home: None,
+        json: false,
+    };
     let mut it = std::env::args().skip(1);
     while let Some(a) = it.next() {
         match a.as_str() {
@@ -155,11 +159,30 @@ fn main() {
         println!("  home                {}", paths.root.display());
         println!("  iterations          {}", args.iters);
         println!();
-        println!("  engine cold start   min {:.3} ms | median {:.3} ms | mean {:.3} ms | max {:.3} ms", ms(min), ms(med), ms(mean), ms(max));
-        println!("  module discovery    {} us ({} slots)", discovery.as_micros(), statuses.len());
-        println!("  reducer throughput  {:.3} us/event ({:.0}k events/s)", reduce_elapsed.as_secs_f64() * 1e6 / N as f64, N as f64 / reduce_elapsed.as_secs_f64() / 1000.0);
+        println!(
+            "  engine cold start   min {:.3} ms | median {:.3} ms | mean {:.3} ms | max {:.3} ms",
+            ms(min),
+            ms(med),
+            ms(mean),
+            ms(max)
+        );
+        println!(
+            "  module discovery    {} us ({} slots)",
+            discovery.as_micros(),
+            statuses.len()
+        );
+        println!(
+            "  reducer throughput  {:.3} us/event ({:.0}k events/s)",
+            reduce_elapsed.as_secs_f64() * 1e6 / N as f64,
+            N as f64 / reduce_elapsed.as_secs_f64() / 1000.0
+        );
         match (rss, peak) {
-            (Some(r), p) => println!("  process RSS         {} KiB (peak {})", r, p.map(|v| format!("{v} KiB")).unwrap_or_else(|| "n/a".into())),
+            (Some(r), p) => println!(
+                "  process RSS         {} KiB (peak {})",
+                r,
+                p.map(|v| format!("{v} KiB"))
+                    .unwrap_or_else(|| "n/a".into())
+            ),
             (None, _) => println!("  process RSS         not exposed by this OS"),
         }
         println!();

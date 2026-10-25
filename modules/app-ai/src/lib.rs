@@ -56,7 +56,11 @@ fn default_model() -> String {
 
 impl Default for Config {
     fn default() -> Self {
-        Self { base_url: default_base(), model: default_model(), system: String::new() }
+        Self {
+            base_url: default_base(),
+            model: default_model(),
+            system: String::new(),
+        }
     }
 }
 
@@ -72,16 +76,29 @@ pub struct Ai {
 
 impl Ai {
     pub fn new() -> Self {
-        Self { config: None, cfg: Config::default(), history: Vec::new(), key_override: None }
+        Self {
+            config: None,
+            cfg: Config::default(),
+            history: Vec::new(),
+            key_override: None,
+        }
     }
 
     fn config_path(&self) -> Result<PathBuf, String> {
-        self.config.clone().ok_or_else(|| "assistant storage not initialised".to_string())
+        self.config
+            .clone()
+            .ok_or_else(|| "assistant storage not initialised".to_string())
     }
 
     fn save(&self) -> Result<(), String> {
         let path = self.config_path()?;
-        write_private(&path, serde_json::to_string_pretty(&self.cfg).map_err(|e| e.to_string())?.as_bytes()).map_err(|e| e.to_string())
+        write_private(
+            &path,
+            serde_json::to_string_pretty(&self.cfg)
+                .map_err(|e| e.to_string())?
+                .as_bytes(),
+        )
+        .map_err(|e| e.to_string())
     }
 
     fn key_path(&self) -> Result<PathBuf, String> {
@@ -115,7 +132,10 @@ impl Ai {
     fn key_state(&self) -> String {
         if self.key_override.is_some() {
             "present (injected)".to_string()
-        } else if std::env::var(KEY_ENV).map(|k| !k.trim().is_empty()).unwrap_or(false) {
+        } else if std::env::var(KEY_ENV)
+            .map(|k| !k.trim().is_empty())
+            .unwrap_or(false)
+        {
             "present (env)".to_string()
         } else if self.key_path().map(|p| p.exists()).unwrap_or(false) {
             "present (key file)".to_string()
@@ -160,8 +180,17 @@ impl Ai {
         }
         self.cfg.base_url = url.to_string();
         self.save()?;
-        Ok(format!("base URL: {url}\nUse `model <name>` to pick a model, then `ask <question>`.")
-            + &format!("\nAPI key: {}", if std::env::var(KEY_ENV).is_ok() { "present" } else { "MISSING — export {KEY_ENV}" }))
+        Ok(
+            format!("base URL: {url}\nUse `model <name>` to pick a model, then `ask <question>`.")
+                + &format!(
+                    "\nAPI key: {}",
+                    if std::env::var(KEY_ENV).is_ok() {
+                        "present"
+                    } else {
+                        "MISSING — export {KEY_ENV}"
+                    }
+                ),
+        )
     }
 
     fn set_model(&mut self, name: &str) -> Result<String, String> {
@@ -184,7 +213,11 @@ impl Ai {
         }
         self.cfg.system = text.to_string();
         self.save()?;
-        Ok(if text.is_empty() { "system instruction cleared.".into() } else { format!("system: {text}") })
+        Ok(if text.is_empty() {
+            "system instruction cleared.".into()
+        } else {
+            format!("system: {text}")
+        })
     }
 
     fn ask(&mut self, question: &str) -> Result<String, String> {
@@ -193,7 +226,10 @@ impl Ai {
             return Err("usage: ask <question>".into());
         }
         if question.chars().count() > MAX_PROMPT {
-            return Err(format!("question too long ({} > {MAX_PROMPT} chars)", question.chars().count()));
+            return Err(format!(
+                "question too long ({} > {MAX_PROMPT} chars)",
+                question.chars().count()
+            ));
         }
         let key = self.api_key()?;
         let mut messages = Vec::new();
@@ -212,7 +248,10 @@ impl Ai {
             "max_tokens": 800,
             "temperature": 0.2,
         });
-        let url = format!("{}/chat/completions", self.cfg.base_url.trim_end_matches('/'));
+        let url = format!(
+            "{}/chat/completions",
+            self.cfg.base_url.trim_end_matches('/')
+        );
         let body = http_post(&url, &key, &payload)?;
         let answer = parse_answer(&body)?;
         let answer: String = answer.chars().take(MAX_ANSWER_CHARS).collect();
@@ -221,12 +260,22 @@ impl Ai {
         if self.history.len() > HISTORY {
             self.history.drain(0..self.history.len() - HISTORY);
         }
-        Ok(format!("{} — {}\n\n{}", self.cfg.model, self.cfg.base_url, answer))
+        Ok(format!(
+            "{} — {}\n\n{}",
+            self.cfg.model, self.cfg.base_url, answer
+        ))
     }
 
     fn status(&self) -> String {
         let key_state = self.key_state();
-        format!("base   {}\nmodel  {}\nkey    {}\nsystem {}\nhistory {} turns", self.cfg.base_url, self.cfg.model, key_state, clip(&self.cfg.system, 40), self.history.len())
+        format!(
+            "base   {}\nmodel  {}\nkey    {}\nsystem {}\nhistory {} turns",
+            self.cfg.base_url,
+            self.cfg.model,
+            key_state,
+            clip(&self.cfg.system, 40),
+            self.history.len()
+        )
     }
 
     fn last_or_help(&self) -> String {
@@ -294,7 +343,10 @@ fn clip(s: &str, max: usize) -> String {
     if s.chars().count() <= max {
         s.to_string()
     } else {
-        format!("{}…", s.chars().take(max.saturating_sub(1)).collect::<String>())
+        format!(
+            "{}…",
+            s.chars().take(max.saturating_sub(1)).collect::<String>()
+        )
     }
 }
 
@@ -322,13 +374,19 @@ pub fn http_post(url: &str, key: &str, payload: &serde_json::Value) -> Result<St
         let detail = response.body_mut().read_to_string().unwrap_or_default();
         let hint = match status {
             401 | 403 => " — the key was rejected; re-export MANDALA_AI_API_KEY".to_string(),
-            404 => format!(" — does this endpoint serve /chat/completions? (model {})", payload["model"]),
+            404 => format!(
+                " — does this endpoint serve /chat/completions? (model {})",
+                payload["model"]
+            ),
             429 => " — rate limited; try again shortly".to_string(),
             _ => String::new(),
         };
         return Err(format!("HTTP {status}{hint}\n{}", clip(&detail, 300)));
     }
-    let text = response.body_mut().read_to_string().map_err(|e| format!("POST {url}: {e}"))?;
+    let text = response
+        .body_mut()
+        .read_to_string()
+        .map_err(|e| format!("POST {url}: {e}"))?;
     if text.len() > MAX_BODY {
         return Err(format!("POST {url}: response larger than {MAX_BODY} bytes"));
     }
@@ -337,7 +395,8 @@ pub fn http_post(url: &str, key: &str, payload: &serde_json::Value) -> Result<St
 
 /// Extract `choices[0].message.content` from a chat-completions response.
 pub fn parse_answer(body: &str) -> Result<String, String> {
-    let value: serde_json::Value = serde_json::from_str(body).map_err(|e| format!("endpoint response: {e}"))?;
+    let value: serde_json::Value =
+        serde_json::from_str(body).map_err(|e| format!("endpoint response: {e}"))?;
     if let Some(err) = value["error"]["message"].as_str() {
         return Err(format!("endpoint error: {err}"));
     }
@@ -352,7 +411,12 @@ pub fn parse_answer(body: &str) -> Result<String, String> {
 fn write_private(path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()> {
     use std::io::Write;
     use std::os::unix::fs::OpenOptionsExt;
-    let mut f = std::fs::OpenOptions::new().write(true).create(true).truncate(true).mode(0o600).open(path)?;
+    let mut f = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(path)?;
     f.write_all(bytes)
 }
 
@@ -402,7 +466,11 @@ mod tests {
     fn ready() -> (tempfile::TempDir, Ai) {
         let dir = tempfile::tempdir().unwrap();
         let mut a = Ai::new();
-        a.init(&ModuleContext { data_dir: dir.path().to_string_lossy().into(), host: Host::detached("app-ai") }).unwrap();
+        a.init(&ModuleContext {
+            data_dir: dir.path().to_string_lossy().into(),
+            host: Host::detached("app-ai"),
+        })
+        .unwrap();
         (dir, a)
     }
 
@@ -417,7 +485,9 @@ mod tests {
     fn serve_chat(answer: &str, expect_key: &str) -> u16 {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let port = listener.local_addr().unwrap().port();
-        let body = format!(r#"{{"id":"c1","choices":[{{"message":{{"role":"assistant","content":"{answer}"}}}}]}}"#);
+        let body = format!(
+            r#"{{"id":"c1","choices":[{{"message":{{"role":"assistant","content":"{answer}"}}}}]}}"#
+        );
         let expected = format!("Authorization: Bearer {expect_key}");
         std::thread::spawn(move || {
             for _ in 0..8 {
@@ -429,7 +499,9 @@ mod tests {
                             Ok(0) => break,
                             Ok(n) => {
                                 read += n;
-                                if buf[..read].windows(4).any(|w| w == b"\r\n\r\n") && buf[..read].contains(&b'{') {
+                                if buf[..read].windows(4).any(|w| w == b"\r\n\r\n")
+                                    && buf[..read].contains(&b'{')
+                                {
                                     break;
                                 }
                                 if read >= buf.len() {
@@ -441,7 +513,9 @@ mod tests {
                     }
                     let request = String::from_utf8_lossy(&buf[..read]).to_string();
                     assert!(
-                        request.to_ascii_lowercase().contains(&expected.to_ascii_lowercase()),
+                        request
+                            .to_ascii_lowercase()
+                            .contains(&expected.to_ascii_lowercase()),
                         "request must carry the bearer key:\n{request}"
                     );
                     assert!(request.contains("/chat/completions"), "{request}");
@@ -474,7 +548,10 @@ mod tests {
 
         let mut second = Ai::new();
         second
-            .init(&ModuleContext { data_dir: dir.path().to_string_lossy().into(), host: Host::detached("app-ai") })
+            .init(&ModuleContext {
+                data_dir: dir.path().to_string_lossy().into(),
+                host: Host::detached("app-ai"),
+            })
             .unwrap();
         assert_eq!(second.cfg.base_url, "http://127.0.0.1:9999/v1");
         assert_eq!(second.cfg.model, "llama3");
@@ -489,7 +566,11 @@ mod tests {
         let (_d, mut a) = ready();
         let out = a.execute("ask hello");
         assert!(!out.ok, "{}", out.text);
-        assert!(out.text.contains(KEY_ENV), "must name the env var: {}", out.text);
+        assert!(
+            out.text.contains(KEY_ENV),
+            "must name the env var: {}",
+            out.text
+        );
         let status = a.execute("status").text;
         assert!(status.contains("MISSING"), "{status}");
     }
@@ -505,19 +586,33 @@ mod tests {
 
         let out = a.execute("key sk-android-123");
         assert!(out.ok, "{}", out.text);
-        assert!(!out.text.contains("sk-android-123"), "the key must never be echoed: {}", out.text);
+        assert!(
+            !out.text.contains("sk-android-123"),
+            "the key must never be echoed: {}",
+            out.text
+        );
         let path = dir.path().join("key");
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            assert_eq!(std::fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600);
+            assert_eq!(
+                std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+                0o600
+            );
         }
-        assert!(a.execute("status").text.contains("present (key file)"), "{}", a.execute("status").text);
+        assert!(
+            a.execute("status").text.contains("present (key file)"),
+            "{}",
+            a.execute("status").text
+        );
 
         // A restart reloads it — the value lives on disk, not in the process.
         let mut second = Ai::new();
         second
-            .init(&ModuleContext { data_dir: dir.path().to_string_lossy().into(), host: Host::detached("app-ai") })
+            .init(&ModuleContext {
+                data_dir: dir.path().to_string_lossy().into(),
+                host: Host::detached("app-ai"),
+            })
             .unwrap();
         assert_eq!(second.api_key().unwrap(), "sk-android-123");
 
@@ -540,18 +635,29 @@ mod tests {
         // Bare `ai ...` style: unknown first word is treated as the question.
         let out = ok(&mut a, "explain rust");
         assert!(out.contains("Hello there"), "{out}");
-        assert!(a.execute("status").text.contains("2 turns"), "history tracked");
+        assert!(
+            a.execute("status").text.contains("2 turns"),
+            "history tracked"
+        );
         ok(&mut a, "clear");
         assert!(a.execute("status").text.contains("0 turns"));
     }
 
     #[test]
     fn answer_parsing_edge_cases() {
-        assert_eq!(parse_answer(r#"{"choices":[{"message":{"content":"ok"}}]}"#).unwrap(), "ok");
+        assert_eq!(
+            parse_answer(r#"{"choices":[{"message":{"content":"ok"}}]}"#).unwrap(),
+            "ok"
+        );
         assert!(parse_answer(r#"{"choices":[]}"#).is_err());
-        assert!(parse_answer(r#"{"error":{"message":"model not found"}}"#).unwrap_err().contains("model not found"));
+        assert!(parse_answer(r#"{"error":{"message":"model not found"}}"#)
+            .unwrap_err()
+            .contains("model not found"));
         assert!(parse_answer("not json").is_err());
-        assert!(parse_answer(r#"{"choices":[{"message":{"content":"   "}}]}"#).is_err(), "blank answer rejected");
+        assert!(
+            parse_answer(r#"{"choices":[{"message":{"content":"   "}}]}"#).is_err(),
+            "blank answer rejected"
+        );
     }
 
     #[test]

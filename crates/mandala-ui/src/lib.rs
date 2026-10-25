@@ -14,7 +14,11 @@ fn color(c: Rgba) -> Color {
 
 fn slot_model(panel: Panel) -> ModelRc<SlotItem> {
     let items: Vec<SlotItem> = slots::by_panel(panel)
-        .map(|s| SlotItem { id: s.id.into(), tag: s.tag().into(), label: s.label.into() })
+        .map(|s| SlotItem {
+            id: s.id.into(),
+            tag: s.tag().into(),
+            label: s.label.into(),
+        })
         .collect();
     ModelRc::new(VecModel::from(items))
 }

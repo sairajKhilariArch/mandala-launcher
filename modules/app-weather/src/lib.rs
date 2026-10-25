@@ -76,11 +76,18 @@ pub struct Weather {
 
 impl Weather {
     pub fn new() -> Self {
-        Self { config: None, endpoint: String::new(), city: String::new(), cache: None }
+        Self {
+            config: None,
+            endpoint: String::new(),
+            city: String::new(),
+            cache: None,
+        }
     }
 
     fn config_path(&self) -> Result<PathBuf, String> {
-        self.config.clone().ok_or_else(|| "weather storage not initialised".to_string())
+        self.config
+            .clone()
+            .ok_or_else(|| "weather storage not initialised".to_string())
     }
 
     fn load(path: &Path) -> (Config, Option<Cached>) {
@@ -99,15 +106,29 @@ impl Weather {
 
     fn save(&self) -> Result<(), String> {
         let path = self.config_path()?;
-        let cfg = Config { endpoint: self.endpoint.clone(), city: self.city.clone() };
-        write_private(&path, serde_json::to_string_pretty(&cfg).map_err(|e| e.to_string())?.as_bytes()).map_err(|e| e.to_string())
+        let cfg = Config {
+            endpoint: self.endpoint.clone(),
+            city: self.city.clone(),
+        };
+        write_private(
+            &path,
+            serde_json::to_string_pretty(&cfg)
+                .map_err(|e| e.to_string())?
+                .as_bytes(),
+        )
+        .map_err(|e| e.to_string())
     }
 
     fn save_cache(&self) -> Result<(), String> {
         let path = self.config_path()?;
         let Some(c) = &self.cache else { return Ok(()) };
-        write_private(&path.with_file_name("cache.json"), serde_json::to_string_pretty(c).map_err(|e| e.to_string())?.as_bytes())
-            .map_err(|e| e.to_string())
+        write_private(
+            &path.with_file_name("cache.json"),
+            serde_json::to_string_pretty(c)
+                .map_err(|e| e.to_string())?
+                .as_bytes(),
+        )
+        .map_err(|e| e.to_string())
     }
 
     fn set_endpoint(&mut self, url: &str) -> Result<String, String> {
@@ -168,19 +189,44 @@ impl Weather {
         let url = Weather::request_url(&endpoint, &city);
         let body = http_get(&url, MAX_BODY)?;
         let obs = Observation::from_json(&body).map_err(|e| format!("endpoint response: {e}"))?;
-        let obs = Observation { location: if obs.location.trim().is_empty() { city.clone() } else { obs.location }, ..obs };
-        self.cache = Some(Cached { fetched_at: now_secs(), obs: obs.clone() });
+        let obs = Observation {
+            location: if obs.location.trim().is_empty() {
+                city.clone()
+            } else {
+                obs.location
+            },
+            ..obs
+        };
+        self.cache = Some(Cached {
+            fetched_at: now_secs(),
+            obs: obs.clone(),
+        });
         self.save_cache()?;
-        Ok(render(&obs, self.cache.as_ref().map(|c| c.fetched_at).unwrap_or(0)))
+        Ok(render(
+            &obs,
+            self.cache.as_ref().map(|c| c.fetched_at).unwrap_or(0),
+        ))
     }
 
     fn status(&self) -> String {
         format!(
             "endpoint  {}\ncity      {}\ncached    {}",
-            if self.endpoint.is_empty() { "(not set — `set <url>`)" } else { &self.endpoint },
-            if self.city.is_empty() { "(not set — `city <name>`)" } else { &self.city },
+            if self.endpoint.is_empty() {
+                "(not set — `set <url>`)"
+            } else {
+                &self.endpoint
+            },
+            if self.city.is_empty() {
+                "(not set — `city <name>`)"
+            } else {
+                &self.city
+            },
             match &self.cache {
-                Some(c) => format!("{} (age {} min)", c.obs.location, (now_secs() - c.fetched_at) / 60),
+                Some(c) => format!(
+                    "{} (age {} min)",
+                    c.obs.location,
+                    (now_secs() - c.fetched_at) / 60
+                ),
                 None => "(none)".into(),
             }
         )
@@ -246,7 +292,8 @@ called directly from this device — no analytics, no third-party SDK.";
 
 impl Observation {
     pub fn from_json(body: &str) -> Result<Self, String> {
-        let obs: Observation = serde_json::from_str(body).map_err(|e| format!("not the agreed JSON: {e}"))?;
+        let obs: Observation =
+            serde_json::from_str(body).map_err(|e| format!("not the agreed JSON: {e}"))?;
         if !obs.temp_c.is_finite() {
             return Err("temp_c is not a number".into());
         }
@@ -258,7 +305,10 @@ impl Observation {
 }
 
 fn render(obs: &Observation, fetched_at: u64) -> String {
-    let mut out = format!("{}   {:.1}°C  {}\n", obs.location, obs.temp_c, obs.condition);
+    let mut out = format!(
+        "{}   {:.1}°C  {}\n",
+        obs.location, obs.temp_c, obs.condition
+    );
     if let Some(f) = obs.feels_like_c {
         out.push_str(&format!("feels {:.1}°C", f));
     }
@@ -277,7 +327,10 @@ fn render(obs: &Observation, fetched_at: u64) -> String {
         out.push_str(&format!("updated {}\n", obs.updated_at));
     }
     if fetched_at > 0 {
-        out.push_str(&format!("cached {} min ago", (now_secs() - fetched_at) / 60));
+        out.push_str(&format!(
+            "cached {} min ago",
+            (now_secs() - fetched_at) / 60
+        ));
     }
     out
 }
@@ -296,7 +349,10 @@ pub fn http_get(url: &str, max: usize) -> Result<String, String> {
     if !(200..300).contains(&status) {
         return Err(format!("fetch {url}: HTTP {status}"));
     }
-    let text = response.body_mut().read_to_string().map_err(|e| format!("fetch {url}: {e}"))?;
+    let text = response
+        .body_mut()
+        .read_to_string()
+        .map_err(|e| format!("fetch {url}: {e}"))?;
     if text.len() > max {
         return Err(format!("fetch {url}: response larger than {max} bytes"));
     }
@@ -307,7 +363,9 @@ pub fn url_encode(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for b in s.bytes() {
         match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => out.push(b as char),
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(b as char)
+            }
             _ => out.push_str(&format!("%{b:02X}")),
         }
     }
@@ -322,14 +380,22 @@ fn split_head(s: &str) -> (&str, &str) {
 }
 
 fn now_secs() -> u64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
 }
 
 #[cfg(unix)]
 fn write_private(path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()> {
     use std::io::Write;
     use std::os::unix::fs::OpenOptionsExt;
-    let mut f = std::fs::OpenOptions::new().write(true).create(true).truncate(true).mode(0o600).open(path)?;
+    let mut f = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(path)?;
     f.write_all(bytes)
 }
 
@@ -382,8 +448,11 @@ mod tests {
     fn ready() -> (tempfile::TempDir, Weather) {
         let dir = tempfile::tempdir().unwrap();
         let mut w = Weather::new();
-        w.init(&ModuleContext { data_dir: dir.path().to_string_lossy().into(), host: Host::detached("app-weather") })
-            .unwrap();
+        w.init(&ModuleContext {
+            data_dir: dir.path().to_string_lossy().into(),
+            host: Host::detached("app-weather"),
+        })
+        .unwrap();
         (dir, w)
     }
 
@@ -420,8 +489,14 @@ mod tests {
 
         // Minimal contract: only temp_c + condition are required.
         assert!(Observation::from_json(r#"{"temp_c":5.0,"condition":"Clear"}"#).is_ok());
-        assert!(Observation::from_json(r#"{"condition":"Clear"}"#).is_err(), "temp required");
-        assert!(Observation::from_json(r#"{"temp_c":5.0}" "#).is_err(), "condition required");
+        assert!(
+            Observation::from_json(r#"{"condition":"Clear"}"#).is_err(),
+            "temp required"
+        );
+        assert!(
+            Observation::from_json(r#"{"temp_c":5.0}" "#).is_err(),
+            "condition required"
+        );
         assert!(Observation::from_json("not json").is_err());
         assert!(Observation::from_json(r#"{"temp_c":NaN,"condition":"x"}"#).is_err());
     }
@@ -437,19 +512,38 @@ mod tests {
 
         let mut second = Weather::new();
         second
-            .init(&ModuleContext { data_dir: dir.path().to_string_lossy().into(), host: Host::detached("app-weather") })
+            .init(&ModuleContext {
+                data_dir: dir.path().to_string_lossy().into(),
+                host: Host::detached("app-weather"),
+            })
             .unwrap();
         let status = ok(&mut second, "status");
-        assert!(status.contains("https://obs.example/api") && status.contains("Berlin"), "{status}");
+        assert!(
+            status.contains("https://obs.example/api") && status.contains("Berlin"),
+            "{status}"
+        );
         assert!(!second.execute("city").ok);
-        assert!(!second.execute(&format!("city {}", "x".repeat(MAX_CITY + 1))).ok);
+        assert!(
+            !second
+                .execute(&format!("city {}", "x".repeat(MAX_CITY + 1)))
+                .ok
+        );
     }
 
     #[test]
     fn request_url_builds_query_or_placeholder() {
-        assert_eq!(Weather::request_url("https://a.example/obs", "Berlin"), "https://a.example/obs?q=Berlin");
-        assert_eq!(Weather::request_url("https://a.example/obs?lang=en", "New York"), "https://a.example/obs?lang=en&q=New%20York");
-        assert_eq!(Weather::request_url("https://a.example/{q}", "São Paulo"), "https://a.example/S%C3%A3o%20Paulo");
+        assert_eq!(
+            Weather::request_url("https://a.example/obs", "Berlin"),
+            "https://a.example/obs?q=Berlin"
+        );
+        assert_eq!(
+            Weather::request_url("https://a.example/obs?lang=en", "New York"),
+            "https://a.example/obs?lang=en&q=New%20York"
+        );
+        assert_eq!(
+            Weather::request_url("https://a.example/{q}", "São Paulo"),
+            "https://a.example/S%C3%A3o%20Paulo"
+        );
         assert_eq!(url_encode("a-b_c.d~e"), "a-b_c.d~e");
         assert_eq!(url_encode("héllo/1"), "h%C3%A9llo%2F1");
     }
@@ -457,24 +551,39 @@ mod tests {
     #[test]
     fn fetch_caches_and_renders() {
         let (dir, mut w) = ready();
-        assert!(!w.execute("fetch Berlin").ok, "unconfigured endpoint fails with setup help");
+        assert!(
+            !w.execute("fetch Berlin").ok,
+            "unconfigured endpoint fails with setup help"
+        );
         let setup = w.execute("").text;
-        assert!(setup.contains("not configured") && setup.contains("temp_c"), "{setup}");
+        assert!(
+            setup.contains("not configured") && setup.contains("temp_c"),
+            "{setup}"
+        );
 
         let port = serve_once(OBS);
         ok(&mut w, &format!("set http://127.0.0.1:{port}/obs"));
         ok(&mut w, "city Berlin");
         let out = ok(&mut w, "fetch");
         assert!(out.contains("Berlin   12.4°C  Partly cloudy"), "{out}");
-        assert!(out.contains("H 14.0 / L 8.0") && out.contains("humidity 71%"), "{out}");
+        assert!(
+            out.contains("H 14.0 / L 8.0") && out.contains("humidity 71%"),
+            "{out}"
+        );
 
         // Offline restart shows the cache.
         let mut second = Weather::new();
         second
-            .init(&ModuleContext { data_dir: dir.path().to_string_lossy().into(), host: Host::detached("app-weather") })
+            .init(&ModuleContext {
+                data_dir: dir.path().to_string_lossy().into(),
+                host: Host::detached("app-weather"),
+            })
             .unwrap();
         let cached = ok(&mut second, "");
-        assert!(cached.contains("Partly cloudy") && cached.contains("cached"), "{cached}");
+        assert!(
+            cached.contains("Partly cloudy") && cached.contains("cached"),
+            "{cached}"
+        );
     }
 
     #[test]
@@ -498,8 +607,14 @@ mod tests {
         ok(&mut w, &format!("set http://127.0.0.1:{port}/obs"));
         // `weather Oslo` style: a single unknown word is treated as a city.
         let out = ok(&mut w, "Oslo");
-        assert!(out.contains("Berlin   12.4"), "fixture always says Berlin: {out}");
-        assert!(!w.execute("helpx").ok || w.execute("helpx").text.contains("fetch"), "unknown word goes through fetch");
+        assert!(
+            out.contains("Berlin   12.4"),
+            "fixture always says Berlin: {out}"
+        );
+        assert!(
+            !w.execute("helpx").ok || w.execute("helpx").text.contains("fetch"),
+            "unknown word goes through fetch"
+        );
     }
 
     #[test]

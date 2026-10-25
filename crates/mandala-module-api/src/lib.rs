@@ -65,10 +65,16 @@ pub struct ModuleReply {
 
 impl ModuleReply {
     pub fn ok(text: impl Into<String>) -> Self {
-        Self { ok: true, text: text.into() }
+        Self {
+            ok: true,
+            text: text.into(),
+        }
     }
     pub fn err(text: impl Into<String>) -> Self {
-        Self { ok: false, text: text.into() }
+        Self {
+            ok: false,
+            text: text.into(),
+        }
     }
     pub fn to_json(&self) -> String {
         serde_json::to_string(self)
@@ -99,7 +105,10 @@ impl Host {
 
     /// A handle that rejects every message (used before `init` and in tests).
     pub fn detached(sender_id: &'static str) -> Self {
-        Self { api: std::ptr::null(), sender_id }
+        Self {
+            api: std::ptr::null(),
+            sender_id,
+        }
     }
 
     /// Send a fire-and-forget message through the host's IPC broker.
@@ -111,7 +120,11 @@ impl Host {
         let (s, t, a, p) = (c(self.sender_id)?, c(target)?, c(action)?, c(payload)?);
         // SAFETY: api is non-null and valid for the process lifetime.
         let code = unsafe { ((*self.api).send)(s.as_ptr(), t.as_ptr(), a.as_ptr(), p.as_ptr()) };
-        if code == SEND_OK { Ok(()) } else { Err(code) }
+        if code == SEND_OK {
+            Ok(())
+        } else {
+            Err(code)
+        }
     }
 }
 
@@ -155,7 +168,8 @@ pub unsafe fn cstr_lossy(ptr: *const c_char) -> String {
 #[macro_export]
 macro_rules! declare_module {
     ($ctor:expr) => {
-        fn __mandala_instance() -> &'static ::std::sync::Mutex<::std::boxed::Box<dyn $crate::Module>> {
+        fn __mandala_instance() -> &'static ::std::sync::Mutex<::std::boxed::Box<dyn $crate::Module>>
+        {
             static INSTANCE: ::std::sync::OnceLock<
                 ::std::sync::Mutex<::std::boxed::Box<dyn $crate::Module>>,
             > = ::std::sync::OnceLock::new();
@@ -168,7 +182,9 @@ macro_rules! declare_module {
         extern "C" fn __mandala_id() -> *const ::std::ffi::c_char {
             static S: ::std::sync::OnceLock<::std::ffi::CString> = ::std::sync::OnceLock::new();
             S.get_or_init(|| {
-                let g = __mandala_instance().lock().unwrap_or_else(|e| e.into_inner());
+                let g = __mandala_instance()
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner());
                 ::std::ffi::CString::new(g.id()).unwrap_or_default()
             })
             .as_ptr()
@@ -177,7 +193,9 @@ macro_rules! declare_module {
         extern "C" fn __mandala_name() -> *const ::std::ffi::c_char {
             static S: ::std::sync::OnceLock<::std::ffi::CString> = ::std::sync::OnceLock::new();
             S.get_or_init(|| {
-                let g = __mandala_instance().lock().unwrap_or_else(|e| e.into_inner());
+                let g = __mandala_instance()
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner());
                 ::std::ffi::CString::new(g.name()).unwrap_or_default()
             })
             .as_ptr()
@@ -189,9 +207,14 @@ macro_rules! declare_module {
         ) -> i32 {
             let r = ::std::panic::catch_unwind(::std::panic::AssertUnwindSafe(|| {
                 let dir = unsafe { $crate::cstr_lossy(data_dir) };
-                let mut g = __mandala_instance().lock().unwrap_or_else(|e| e.into_inner());
+                let mut g = __mandala_instance()
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner());
                 let id: &'static str = g.id();
-                let ctx = $crate::ModuleContext { data_dir: dir, host: $crate::Host::new(host, id) };
+                let ctx = $crate::ModuleContext {
+                    data_dir: dir,
+                    host: $crate::Host::new(host, id),
+                };
                 g.init(&ctx)
             }));
             match r {
@@ -208,12 +231,16 @@ macro_rules! declare_module {
             let reply = ::std::panic::catch_unwind(::std::panic::AssertUnwindSafe(|| {
                 let a = unsafe { $crate::cstr_lossy(action) };
                 let p = unsafe { $crate::cstr_lossy(payload) };
-                let mut g = __mandala_instance().lock().unwrap_or_else(|e| e.into_inner());
+                let mut g = __mandala_instance()
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner());
                 g.handle(&a, &p)
             }))
             .unwrap_or_else(|_| $crate::ModuleReply::err("module panicked"));
             let json = reply.to_json().replace('\0', "");
-            ::std::ffi::CString::new(json).unwrap_or_default().into_raw()
+            ::std::ffi::CString::new(json)
+                .unwrap_or_default()
+                .into_raw()
         }
 
         extern "C" fn __mandala_free(p: *mut ::std::ffi::c_char) {

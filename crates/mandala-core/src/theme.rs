@@ -61,11 +61,30 @@ impl Rgba {
         let byte = |i: usize| u8::from_str_radix(&h[i..i + 2], 16).map_err(|_| bad());
         match h.len() {
             3 => {
-                let n = |i: usize| u8::from_str_radix(&h[i..i + 1], 16).map(|v| v * 17).map_err(|_| bad());
-                Ok(Self { r: n(0)?, g: n(1)?, b: n(2)?, a: 255 })
+                let n = |i: usize| {
+                    u8::from_str_radix(&h[i..i + 1], 16)
+                        .map(|v| v * 17)
+                        .map_err(|_| bad())
+                };
+                Ok(Self {
+                    r: n(0)?,
+                    g: n(1)?,
+                    b: n(2)?,
+                    a: 255,
+                })
             }
-            6 => Ok(Self { r: byte(0)?, g: byte(2)?, b: byte(4)?, a: 255 }),
-            8 => Ok(Self { r: byte(0)?, g: byte(2)?, b: byte(4)?, a: byte(6)? }),
+            6 => Ok(Self {
+                r: byte(0)?,
+                g: byte(2)?,
+                b: byte(4)?,
+                a: 255,
+            }),
+            8 => Ok(Self {
+                r: byte(0)?,
+                g: byte(2)?,
+                b: byte(4)?,
+                a: byte(6)?,
+            }),
             _ => Err(bad()),
         }
     }
@@ -97,10 +116,14 @@ impl ThemeManifest {
             return Err(MandalaError::Theme("theme_id is empty".into()));
         }
         if !(0.0..=16.0).contains(&t.border_width_px) {
-            return Err(MandalaError::Theme("border_width_px must be within 0..=16".into()));
+            return Err(MandalaError::Theme(
+                "border_width_px must be within 0..=16".into(),
+            ));
         }
         if !(0.0..=64.0).contains(&t.corner_radius_px) {
-            return Err(MandalaError::Theme("corner_radius_px must be within 0..=64".into()));
+            return Err(MandalaError::Theme(
+                "corner_radius_px must be within 0..=64".into(),
+            ));
         }
         Ok(ResolvedTheme {
             id: self.theme_id.clone(),
@@ -129,7 +152,11 @@ impl ThemeManager {
     pub fn with_presets() -> Self {
         let themes = [PRESET_OLED, PRESET_CEL, PRESET_RETRO]
             .iter()
-            .map(|j| ThemeManifest::from_json(j).and_then(|m| m.resolve()).expect("built-in theme must be valid"))
+            .map(|j| {
+                ThemeManifest::from_json(j)
+                    .and_then(|m| m.resolve())
+                    .expect("built-in theme must be valid")
+            })
             .collect();
         Self { themes, current: 0 }
     }
@@ -138,7 +165,9 @@ impl ThemeManager {
     /// reported in the returned warnings. Same-id themes replace presets.
     pub fn load_user_dir(&mut self, dir: &Path) -> Vec<String> {
         let mut warnings = Vec::new();
-        let Ok(rd) = std::fs::read_dir(dir) else { return warnings };
+        let Ok(rd) = std::fs::read_dir(dir) else {
+            return warnings;
+        };
         let mut paths: Vec<_> = rd.flatten().map(|e| e.path()).collect();
         paths.sort();
         for p in paths {
@@ -180,7 +209,10 @@ impl ThemeManager {
             self.current = (self.current + 1) % self.themes.len();
             return Ok(self.current());
         }
-        let exact = self.themes.iter().position(|t| t.id.to_ascii_lowercase() == key);
+        let exact = self
+            .themes
+            .iter()
+            .position(|t| t.id.to_ascii_lowercase() == key);
         let idx = exact.or_else(|| {
             let hits: Vec<_> = self
                 .themes
@@ -196,7 +228,10 @@ impl ThemeManager {
                 self.current = i;
                 Ok(self.current())
             }
-            None => Err(MandalaError::Theme(format!("unknown theme `{key}` (have: {})", self.ids().join(", ")))),
+            None => Err(MandalaError::Theme(format!(
+                "unknown theme `{key}` (have: {})",
+                self.ids().join(", ")
+            ))),
         }
     }
 }
@@ -208,14 +243,41 @@ mod tests {
     #[test]
     fn presets_parse_and_resolve() {
         let m = ThemeManager::with_presets();
-        assert_eq!(m.ids(), ["minimalist-oled-dark", "cel-shaded", "retro-terminal"]);
-        assert_eq!(m.current().canvas_bg, Rgba { r: 0, g: 0, b: 0, a: 255 });
-        assert_eq!(m.current().accent_focus, Rgba { r: 0xD4, g: 0xA3, b: 0x73, a: 255 });
+        assert_eq!(
+            m.ids(),
+            ["minimalist-oled-dark", "cel-shaded", "retro-terminal"]
+        );
+        assert_eq!(
+            m.current().canvas_bg,
+            Rgba {
+                r: 0,
+                g: 0,
+                b: 0,
+                a: 255
+            }
+        );
+        assert_eq!(
+            m.current().accent_focus,
+            Rgba {
+                r: 0xD4,
+                g: 0xA3,
+                b: 0x73,
+                a: 255
+            }
+        );
     }
 
     #[test]
     fn color_parsing() {
-        assert_eq!(Rgba::parse("#fff").unwrap(), Rgba { r: 255, g: 255, b: 255, a: 255 });
+        assert_eq!(
+            Rgba::parse("#fff").unwrap(),
+            Rgba {
+                r: 255,
+                g: 255,
+                b: 255,
+                a: 255
+            }
+        );
         assert_eq!(Rgba::parse("#00FF6680").unwrap().a, 0x80);
         for bad in ["", "000000", "#12", "#GGGGGG", "#12345", "#ééé"] {
             assert!(Rgba::parse(bad).is_err(), "{bad}");
@@ -250,13 +312,25 @@ mod tests {
         let mut custom = ThemeManifest::from_json(PRESET_OLED).unwrap();
         custom.theme_id = "mine".into();
         custom.tokens.canvas_bg = "#102030".into();
-        std::fs::write(dir.path().join("mine.json"), serde_json::to_string(&custom).unwrap()).unwrap();
+        std::fs::write(
+            dir.path().join("mine.json"),
+            serde_json::to_string(&custom).unwrap(),
+        )
+        .unwrap();
         std::fs::write(dir.path().join("broken.json"), "{ nope").unwrap();
         std::fs::write(dir.path().join("readme.txt"), "ignored").unwrap();
 
         let mut m = ThemeManager::with_presets();
         let warnings = m.load_user_dir(dir.path());
         assert_eq!(warnings.len(), 1);
-        assert_eq!(m.select("mine").unwrap().canvas_bg, Rgba { r: 0x10, g: 0x20, b: 0x30, a: 255 });
+        assert_eq!(
+            m.select("mine").unwrap().canvas_bg,
+            Rgba {
+                r: 0x10,
+                g: 0x20,
+                b: 0x30,
+                a: 255
+            }
+        );
     }
 }

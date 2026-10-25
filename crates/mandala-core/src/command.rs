@@ -5,7 +5,11 @@ use crate::slots::{SlotDef, SLOTS};
 /// Case-insensitive subsequence match. Higher is better; `None` = no match.
 /// Rewards prefix hits, word-boundary hits and consecutive runs.
 pub fn fuzzy_score(query: &str, candidate: &str) -> Option<i32> {
-    let q: Vec<char> = query.chars().filter(|c| !c.is_whitespace()).flat_map(char::to_lowercase).collect();
+    let q: Vec<char> = query
+        .chars()
+        .filter(|c| !c.is_whitespace())
+        .flat_map(char::to_lowercase)
+        .collect();
     if q.is_empty() {
         return Some(0);
     }
@@ -175,7 +179,10 @@ mod tests {
         assert_eq!(parse_command("= 2+2"), Command::Calc("2+2".into()));
         assert_eq!(parse_command("=save 2+2"), Command::CalcSave("2+2".into()));
         assert_eq!(parse_command("= save 2+2"), Command::CalcSave("2+2".into()));
-        assert_eq!(parse_command("note buy milk"), Command::Note("buy milk".into()));
+        assert_eq!(
+            parse_command("note buy milk"),
+            Command::Note("buy milk".into())
+        );
         assert_eq!(parse_command("n x"), Command::Note("x".into()));
         assert_eq!(parse_command("theme next"), Command::Theme("next".into()));
         assert_eq!(parse_command("monitor"), Command::Monitor);
@@ -188,25 +195,61 @@ mod tests {
         assert_eq!(parse_command("> ls -a"), Command::Terminal("ls -a".into()));
         assert_eq!(parse_command(">"), Command::Terminal("".into()));
         assert_eq!(parse_command("2fa"), Command::Aegis("".into()));
-        assert_eq!(parse_command("2fa code github"), Command::Aegis("code github".into()));
-        assert_eq!(parse_command("vault unlock hunter2"), Command::Vault("unlock hunter2".into()));
-        assert_eq!(parse_command("lsend recv 8080 tok!"), Command::LocalSend("recv 8080 tok!".into()));
-        assert_eq!(parse_command("wallpaper /sdcard/a.png"), Command::Wallpaper("/sdcard/a.png".into()));
+        assert_eq!(
+            parse_command("2fa code github"),
+            Command::Aegis("code github".into())
+        );
+        assert_eq!(
+            parse_command("vault unlock hunter2"),
+            Command::Vault("unlock hunter2".into())
+        );
+        assert_eq!(
+            parse_command("lsend recv 8080 tok!"),
+            Command::LocalSend("recv 8080 tok!".into())
+        );
+        assert_eq!(
+            parse_command("wallpaper /sdcard/a.png"),
+            Command::Wallpaper("/sdcard/a.png".into())
+        );
         assert_eq!(parse_command("overlay"), Command::Overlay);
-        assert_eq!(parse_command("weather Berlin"), Command::Weather("Berlin".into()));
+        assert_eq!(
+            parse_command("weather Berlin"),
+            Command::Weather("Berlin".into())
+        );
         assert_eq!(parse_command("rss fetch"), Command::Rss("fetch".into()));
-        assert_eq!(parse_command("tasks add call mom"), Command::Tasks("add call mom".into()));
-        assert_eq!(parse_command("doc open 2"), Command::Reader("open 2".into()));
-        assert_eq!(parse_command("gallery list"), Command::Gallery("list".into()));
+        assert_eq!(
+            parse_command("tasks add call mom"),
+            Command::Tasks("add call mom".into())
+        );
+        assert_eq!(
+            parse_command("doc open 2"),
+            Command::Reader("open 2".into())
+        );
+        assert_eq!(
+            parse_command("gallery list"),
+            Command::Gallery("list".into())
+        );
         assert_eq!(parse_command("chat rooms"), Command::Chat("rooms".into()));
         assert_eq!(parse_command("ai status"), Command::Ai("status".into()));
-        assert_eq!(parse_command("ask summarise this"), Command::Ai("ask summarise this".into()));
+        assert_eq!(
+            parse_command("ask summarise this"),
+            Command::Ai("ask summarise this".into())
+        );
         assert_eq!(parse_command("camera"), Command::Camera);
         // Bare words still fall through to slot search.
-        assert!(matches!(parse_command("ask"), Command::NoMatch(_) | Command::Launch(_)));
-        assert!(matches!(parse_command("cameraa"), Command::NoMatch(_) | Command::Launch(_)));
+        assert!(matches!(
+            parse_command("ask"),
+            Command::NoMatch(_) | Command::Launch(_)
+        ));
+        assert!(matches!(
+            parse_command("cameraa"),
+            Command::NoMatch(_) | Command::Launch(_)
+        ));
         // Bare `wall` still falls through to fuzzy search (no slot matched here).
-        assert!(matches!(parse_command("wall"), Command::NoMatch(_) | Command::Launch(_)));
+        assert!(matches!(
+            parse_command("wall"),
+            Command::NoMatch(_) | Command::Launch(_)
+        ));
         // Ordinary fuzzy search is unaffected.
         assert_eq!(parse_command("term"), Command::Launch("app-terminal"));
     }

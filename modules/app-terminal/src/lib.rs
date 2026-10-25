@@ -56,7 +56,9 @@ impl Terminal {
     }
 
     fn root(&self) -> Result<&Path, String> {
-        self.root.as_deref().ok_or_else(|| "terminal storage not initialised".to_string())
+        self.root
+            .as_deref()
+            .ok_or_else(|| "terminal storage not initialised".to_string())
     }
 
     /// Resolve `arg` inside the sandbox, refusing traversal and escaping
@@ -89,7 +91,9 @@ impl Terminal {
     /// Canonicalise the deepest existing ancestor and require it to stay below
     /// `root`. This catches `ln -s /etc etc` style escapes.
     fn ensure_inside(root: &Path, path: &Path) -> Result<(), String> {
-        let root = root.canonicalize().map_err(|e| format!("sandbox unavailable: {e}"))?;
+        let root = root
+            .canonicalize()
+            .map_err(|e| format!("sandbox unavailable: {e}"))?;
         let mut probe = path;
         loop {
             if let Ok(real) = probe.canonicalize() {
@@ -124,7 +128,10 @@ impl Terminal {
             return Ok(format!("{}\n(empty)", self.display(&path)));
         }
         entries.sort_by(|a, b| a.0.cmp(&b.0));
-        let rows: Vec<String> = entries.into_iter().map(|(name, meta)| format!("{meta}  {name}")).collect();
+        let rows: Vec<String> = entries
+            .into_iter()
+            .map(|(name, meta)| format!("{meta}  {name}"))
+            .collect();
         Ok(format!("{}\n{}", self.display(&path), rows.join("\n")))
     }
 
@@ -164,8 +171,16 @@ impl Terminal {
         if path.is_dir() {
             return Err(format!("write: {} is a directory", file));
         }
-        let separator = if append && path.exists() && !ends_with_newline(&path) { "\n" } else { "" };
-        let body = if append { format!("{separator}{text}\n") } else { text.to_string() };
+        let separator = if append && path.exists() && !ends_with_newline(&path) {
+            "\n"
+        } else {
+            ""
+        };
+        let body = if append {
+            format!("{separator}{text}\n")
+        } else {
+            text.to_string()
+        };
         let result = if append {
             use std::io::Write;
             std::fs::OpenOptions::new()
@@ -177,7 +192,11 @@ impl Terminal {
             std::fs::write(&path, body.as_bytes())
         };
         result.map_err(|e| format!("write: {e}"))?;
-        Ok(format!("wrote {} bytes to {}", body.len(), self.display(&path)))
+        Ok(format!(
+            "wrote {} bytes to {}",
+            body.len(),
+            self.display(&path)
+        ))
     }
 
     fn remove(&self, file: &str) -> Result<String, String> {
@@ -295,8 +314,12 @@ impl Terminal {
 /// True when the file's last byte is `\n` (empty files count as "no").
 fn ends_with_newline(path: &Path) -> bool {
     use std::io::{Read, Seek, SeekFrom};
-    let Ok(mut f) = std::fs::File::open(path) else { return false };
-    let Ok(len) = f.metadata().map(|m| m.len()) else { return false };
+    let Ok(mut f) = std::fs::File::open(path) else {
+        return false;
+    };
+    let Ok(len) = f.metadata().map(|m| m.len()) else {
+        return false;
+    };
     if len == 0 {
         return false;
     }
@@ -316,7 +339,10 @@ fn split_head(s: &str) -> (&str, &str) {
 }
 
 fn now_secs() -> u64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
 }
 
 /// `YYYY-MM-DD HH:MM:SS` in UTC (Howard Hinnant's civil-from-days algorithm).
@@ -378,8 +404,11 @@ mod tests {
     fn ready() -> (tempfile::TempDir, Terminal) {
         let dir = tempfile::tempdir().unwrap();
         let mut t = Terminal::new();
-        t.init(&ModuleContext { data_dir: dir.path().to_string_lossy().into(), host: Host::detached("app-terminal") })
-            .unwrap();
+        t.init(&ModuleContext {
+            data_dir: dir.path().to_string_lossy().into(),
+            host: Host::detached("app-terminal"),
+        })
+        .unwrap();
         (dir, t)
     }
 
@@ -413,7 +442,13 @@ mod tests {
     #[test]
     fn sandbox_blocks_traversal_absolute_paths_and_symlinks() {
         let (dir, mut t) = ready();
-        for bad in ["cat ../secret", "cat /etc/passwd", "cat a/../../b", "write ../x y", "ls .."] {
+        for bad in [
+            "cat ../secret",
+            "cat /etc/passwd",
+            "cat a/../../b",
+            "write ../x y",
+            "ls ..",
+        ] {
             assert!(!t.handle("run", bad).ok, "{bad} should be rejected");
         }
         #[cfg(unix)]
@@ -461,10 +496,15 @@ mod tests {
 
     #[test]
     fn path_components_are_not_smuggled() {
-        assert!(Terminal::resolve(Path::new("/tmp"), "a\\..\\b").is_err());
-        assert!(Terminal::resolve(Path::new("/tmp"), "./a/b/../c").is_err());
-        let p = Terminal::resolve(Path::new("/tmp"), "a/./b/").unwrap();
-        assert_eq!(p, PathBuf::from("/tmp/a/b"));
+        // Use a real temporary directory so the test also works on Windows,
+        // where /tmp is not a conventional existing path.
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+
+        assert!(Terminal::resolve(root, "a\\..\\b").is_err());
+        assert!(Terminal::resolve(root, "./a/b/../c").is_err());
+        let p = Terminal::resolve(root, "a/./b/").unwrap();
+        assert_eq!(p, root.join("a/b"));
     }
 
     #[test]

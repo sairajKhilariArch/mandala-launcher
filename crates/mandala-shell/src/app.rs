@@ -35,7 +35,10 @@ impl App {
         rt: tokio::runtime::Handle,
         ui: slint::Weak<MainWindow>,
     ) -> Arc<Self> {
-        let state = AppState { theme_id: themes.current().id.clone(), ..AppState::default() };
+        let state = AppState {
+            theme_id: themes.current().id.clone(),
+            ..AppState::default()
+        };
         Arc::new(Self {
             state: Mutex::new(state),
             gestures: Mutex::new(GestureTracker::new(GestureConfig::default())),
@@ -78,10 +81,17 @@ impl App {
 
     fn run_effect(self: &Arc<Self>, fx: Effect) {
         match fx {
-            Effect::CallModule { module, action, payload } => {
+            Effect::CallModule {
+                module,
+                action,
+                payload,
+            } => {
                 let env = self.broker.envelope(HOST, &module, &action, &payload);
                 if let Err(e) = self.broker.try_dispatch(env) {
-                    self.dispatch(Action::HostError { module, text: e.to_string() });
+                    self.dispatch(Action::HostError {
+                        module,
+                        text: e.to_string(),
+                    });
                 }
             }
             Effect::RefreshMonitor => {
@@ -117,20 +127,27 @@ impl App {
                     Err(e) => format!("overlay: {e}"),
                 };
                 #[cfg(not(target_os = "android"))]
-                let message = "overlay: Android only — desktop window managers do not need it.".to_string();
+                let message =
+                    "overlay: Android only — desktop window managers do not need it.".to_string();
                 self.dispatch(Action::Notice(message));
             }
             Effect::Camera => {
                 #[cfg(target_os = "android")]
                 let message = {
                     let dir = self.host.paths().data_dir("app-camera").join("captures");
-                    let file = dir.join(format!("IMG_{}.jpg", std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .map(|d| d.as_secs())
-                        .unwrap_or(0)));
+                    let file = dir.join(format!(
+                        "IMG_{}.jpg",
+                        std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .map(|d| d.as_secs())
+                            .unwrap_or(0)
+                    ));
                     let _ = std::fs::create_dir_all(&dir);
                     match crate::android::capture(&file) {
-                        Ok(()) => format!("camera: opened — the photo is written to {}", file.display()),
+                        Ok(()) => format!(
+                            "camera: opened — the photo is written to {}",
+                            file.display()
+                        ),
                         Err(e) => format!("camera: {e}"),
                     }
                 };
@@ -144,7 +161,8 @@ impl App {
                     Ok(theme) => {
                         let id = theme.id.clone();
                         let weak = lock(&self.ui).clone();
-                        let _ = weak.upgrade_in_event_loop(move |ui| mandala_ui::apply_theme(&ui, &theme));
+                        let _ = weak
+                            .upgrade_in_event_loop(move |ui| mandala_ui::apply_theme(&ui, &theme));
                         self.dispatch(Action::ThemeApplied { id });
                     }
                     Err(e) => self.dispatch(Action::Notice(e.to_string())),
@@ -179,10 +197,24 @@ impl App {
         let module = env.sender_module.clone();
         let reply = ModuleReply::from_json(&env.data_json);
         let action = match env.payload_action.as_str() {
-            "reply" => Action::ModuleReply { module, ok: reply.ok, text: reply.text },
-            "error" => Action::HostError { module, text: reply.text },
+            "reply" => Action::ModuleReply {
+                module,
+                ok: reply.ok,
+                text: reply.text,
+            },
+            "error" => Action::HostError {
+                module,
+                text: reply.text,
+            },
             // Unsolicited message from a module (e.g. a notification).
-            _ => Action::Notice(format!("[{module}] {}", if reply.text.is_empty() { env.data_json } else { reply.text })),
+            _ => Action::Notice(format!(
+                "[{module}] {}",
+                if reply.text.is_empty() {
+                    env.data_json
+                } else {
+                    reply.text
+                }
+            )),
         };
         self.dispatch(action);
     }

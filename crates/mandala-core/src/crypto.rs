@@ -65,19 +65,28 @@ impl TrustStore {
     /// Verify `digest` against `sig_bytes` using any trusted key.
     pub fn verify(&self, digest: &Digest32, sig_bytes: &[u8]) -> Result<()> {
         if self.keys.is_empty() {
-            return Err(MandalaError::Crypto("no trusted public keys installed".into()));
+            return Err(MandalaError::Crypto(
+                "no trusted public keys installed".into(),
+            ));
         }
         let sig = parse_signature(sig_bytes)?;
-        if self.keys.iter().any(|k| k.verify_strict(digest, &sig).is_ok()) {
+        if self
+            .keys
+            .iter()
+            .any(|k| k.verify_strict(digest, &sig).is_ok())
+        {
             Ok(())
         } else {
-            Err(MandalaError::Crypto("signature does not match any trusted key".into()))
+            Err(MandalaError::Crypto(
+                "signature does not match any trusted key".into(),
+            ))
         }
     }
 }
 
 pub fn parse_public_key(text: &str) -> Result<VerifyingKey> {
-    let raw = hex::decode(text.trim()).map_err(|e| MandalaError::Crypto(format!("public key hex: {e}")))?;
+    let raw = hex::decode(text.trim())
+        .map_err(|e| MandalaError::Crypto(format!("public key hex: {e}")))?;
     let arr: [u8; 32] = raw
         .try_into()
         .map_err(|_| MandalaError::Crypto("public key must be 32 bytes".into()))?;
@@ -85,7 +94,8 @@ pub fn parse_public_key(text: &str) -> Result<VerifyingKey> {
 }
 
 pub fn parse_signing_key(text: &str) -> Result<SigningKey> {
-    let raw = hex::decode(text.trim()).map_err(|e| MandalaError::Crypto(format!("secret key hex: {e}")))?;
+    let raw = hex::decode(text.trim())
+        .map_err(|e| MandalaError::Crypto(format!("secret key hex: {e}")))?;
     let arr: [u8; 32] = raw
         .try_into()
         .map_err(|_| MandalaError::Crypto("secret key must be 32 bytes".into()))?;
@@ -97,7 +107,9 @@ pub fn parse_signature(raw: &[u8]) -> Result<Signature> {
     let bytes: Vec<u8> = if raw.len() == 64 {
         raw.to_vec()
     } else {
-        let text = std::str::from_utf8(raw).map_err(|_| MandalaError::Crypto("signature is neither 64 raw bytes nor hex".into()))?;
+        let text = std::str::from_utf8(raw).map_err(|_| {
+            MandalaError::Crypto("signature is neither 64 raw bytes nor hex".into())
+        })?;
         hex::decode(text.trim()).map_err(|e| MandalaError::Crypto(format!("signature hex: {e}")))?
     };
     let arr: [u8; 64] = bytes
@@ -129,7 +141,8 @@ mod tests {
         let sig = sign_binary(&sk, bin);
         ts.verify(&sha256(bin), &sig.to_bytes()).unwrap();
         // hex form works too
-        ts.verify(&sha256(bin), hex::encode(sig.to_bytes()).as_bytes()).unwrap();
+        ts.verify(&sha256(bin), hex::encode(sig.to_bytes()).as_bytes())
+            .unwrap();
     }
 
     #[test]
@@ -151,7 +164,9 @@ mod tests {
     fn empty_store_rejects_everything() {
         let (sk, _) = keypair();
         let sig = sign_binary(&sk, b"x");
-        assert!(TrustStore::default().verify(&sha256(b"x"), &sig.to_bytes()).is_err());
+        assert!(TrustStore::default()
+            .verify(&sha256(b"x"), &sig.to_bytes())
+            .is_err());
     }
 
     #[test]
@@ -167,6 +182,9 @@ mod tests {
         let pk_hex = hex::encode(sk.verifying_key().to_bytes());
         assert_eq!(parse_public_key(&pk_hex).unwrap(), sk.verifying_key());
         let sk_hex = hex::encode(sk.to_bytes());
-        assert_eq!(parse_signing_key(&sk_hex).unwrap().to_bytes(), sk.to_bytes());
+        assert_eq!(
+            parse_signing_key(&sk_hex).unwrap().to_bytes(),
+            sk.to_bytes()
+        );
     }
 }

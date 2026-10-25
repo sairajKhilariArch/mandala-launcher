@@ -45,7 +45,12 @@ pub struct Tasks {
 
 impl Tasks {
     pub fn new() -> Self {
-        Self { file: None, items: Vec::new(), today: today_of_now(), warning: None }
+        Self {
+            file: None,
+            items: Vec::new(),
+            today: today_of_now(),
+            warning: None,
+        }
     }
 
     /// Test seam: pretend it is another day.
@@ -54,7 +59,9 @@ impl Tasks {
     }
 
     fn path(&self) -> Result<&Path, String> {
-        self.file.as_deref().ok_or_else(|| "tasks storage not initialised".to_string())
+        self.file
+            .as_deref()
+            .ok_or_else(|| "tasks storage not initialised".to_string())
     }
 
     fn load(file: &Path) -> (Vec<Task>, Option<String>) {
@@ -62,7 +69,10 @@ impl Tasks {
             Ok(text) if text.trim().is_empty() => (Vec::new(), None),
             Ok(text) => match serde_json::from_str::<Vec<Task>>(&text) {
                 Ok(v) => (v, None),
-                Err(e) => (Vec::new(), Some(format!("tasks file was unreadable ({e}); starting empty"))),
+                Err(e) => (
+                    Vec::new(),
+                    Some(format!("tasks file was unreadable ({e}); starting empty")),
+                ),
             },
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => (Vec::new(), None),
             Err(e) => (Vec::new(), Some(format!("could not read tasks: {e}"))),
@@ -76,7 +86,11 @@ impl Tasks {
     }
 
     fn index_of(&self, token: &str) -> Result<usize, String> {
-        let n: usize = token.trim().trim_end_matches('.').parse().map_err(|_| format!("`{token}` is not a list number"))?;
+        let n: usize = token
+            .trim()
+            .trim_end_matches('.')
+            .parse()
+            .map_err(|_| format!("`{token}` is not a list number"))?;
         if n == 0 || n > self.items.len() {
             return Err(format!("no item {n} (list has {})", self.items.len()));
         }
@@ -94,7 +108,13 @@ impl Tasks {
         if self.items.len() >= MAX_ITEMS {
             return Err(format!("list is full ({MAX_ITEMS} items)"));
         }
-        let id = self.items.iter().map(|t| t.id).max().unwrap_or(0).saturating_add(1);
+        let id = self
+            .items
+            .iter()
+            .map(|t| t.id)
+            .max()
+            .unwrap_or(0)
+            .saturating_add(1);
         self.items.push(Task {
             id,
             text: text.to_string(),
@@ -105,7 +125,10 @@ impl Tasks {
             done_day: None,
         });
         self.save()?;
-        Ok(format!("{} `{text}`", if habit { "habit added:" } else { "added:" }))
+        Ok(format!(
+            "{} `{text}`",
+            if habit { "habit added:" } else { "added:" }
+        ))
     }
 
     /// Mark item `n` complete. Habits advance/reset their streak by day.
@@ -120,7 +143,11 @@ impl Tasks {
             return Ok(format!("`{}` is already done today", task.text));
         }
         if task.habit {
-            task.streak = if task.done_day == Some(today.saturating_sub(1)) { task.streak.saturating_add(1) } else { 1 };
+            task.streak = if task.done_day == Some(today.saturating_sub(1)) {
+                task.streak.saturating_add(1)
+            } else {
+                1
+            };
             task.best = task.best.max(task.streak);
             task.done_day = Some(today);
             task.done = true;
@@ -173,10 +200,22 @@ impl Tasks {
         }
         for (i, t) in self.items.iter().enumerate() {
             // A habit that was completed on an earlier day is due again.
-            let done = if t.habit { t.done && t.done_day == Some(self.today) } else { t.done };
+            let done = if t.habit {
+                t.done && t.done_day == Some(self.today)
+            } else {
+                t.done
+            };
             let mark = if done { "[x]" } else { "[ ]" };
-            let habit = if t.habit { format!("  streak {}", t.streak) } else { String::new() };
-            let best = if t.habit { format!(" (best {})", t.best) } else { String::new() };
+            let habit = if t.habit {
+                format!("  streak {}", t.streak)
+            } else {
+                String::new()
+            };
+            let best = if t.habit {
+                format!(" (best {})", t.best)
+            } else {
+                String::new()
+            };
             out.push_str(&format!("{:>3}. {mark} {}{habit}{best}\n", i + 1, t.text));
         }
         let tasks = self.items.iter().filter(|t| !t.habit).count();
@@ -240,14 +279,22 @@ fn split_head(s: &str) -> (&str, &str) {
 }
 
 fn today_of_now() -> u64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs() / SECONDS_PER_DAY).unwrap_or(0)
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs() / SECONDS_PER_DAY)
+        .unwrap_or(0)
 }
 
 #[cfg(unix)]
 fn write_private(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     use std::io::Write;
     use std::os::unix::fs::OpenOptionsExt;
-    let mut f = std::fs::OpenOptions::new().write(true).create(true).truncate(true).mode(0o600).open(path)?;
+    let mut f = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(path)?;
     f.write_all(bytes)
 }
 
@@ -297,8 +344,11 @@ mod tests {
     fn ready() -> (tempfile::TempDir, Tasks) {
         let dir = tempfile::tempdir().unwrap();
         let mut t = Tasks::new();
-        t.init(&ModuleContext { data_dir: dir.path().to_string_lossy().into(), host: Host::detached("app-tasks") })
-            .unwrap();
+        t.init(&ModuleContext {
+            data_dir: dir.path().to_string_lossy().into(),
+            host: Host::detached("app-tasks"),
+        })
+        .unwrap();
         t.set_day(1_000);
         (dir, t)
     }
@@ -316,7 +366,10 @@ mod tests {
         ok(&mut t, "add buy milk");
         ok(&mut t, "add walk the dog");
         let list = ok(&mut t, "list");
-        assert!(list.contains("[ ] buy milk") && list.contains("[ ] walk the dog"), "{list}");
+        assert!(
+            list.contains("[ ] buy milk") && list.contains("[ ] walk the dog"),
+            "{list}"
+        );
         assert!(list.contains("2 task(s), 0 habit(s)"));
     }
 
@@ -348,7 +401,10 @@ mod tests {
         assert!(ok(&mut t, "list").contains("streak 2 (best 2)"));
         // A gap resets it but keeps the best.
         t.set_day(1_010);
-        assert!(ok(&mut t, "list").contains("[ ] meditation"), "habit is due again on a new day");
+        assert!(
+            ok(&mut t, "list").contains("[ ] meditation"),
+            "habit is due again on a new day"
+        );
         ok(&mut t, "done 1");
         let list = ok(&mut t, "list");
         assert!(list.contains("streak 1 (best 2)"), "{list}");
@@ -374,7 +430,10 @@ mod tests {
         ok(&mut t, "add survive reload");
         let mut second = Tasks::new();
         second
-            .init(&ModuleContext { data_dir: dir.path().to_string_lossy().into(), host: Host::detached("app-tasks") })
+            .init(&ModuleContext {
+                data_dir: dir.path().to_string_lossy().into(),
+                host: Host::detached("app-tasks"),
+            })
             .unwrap();
         assert!(second.handle("launch", "").text.contains("survive reload"));
     }
@@ -392,8 +451,14 @@ mod tests {
             assert!(t.execute(&format!("add item-{i}")).ok);
         }
         assert!(!t.execute("add overflow").ok, "list full");
-        assert!(!t.execute(&format!("habit x{}", "y".repeat(MAX_TEXT))).ok, "still full");
-        assert!(t.execute("list 3").ok, "extra arguments on list are ignored");
+        assert!(
+            !t.execute(&format!("habit x{}", "y".repeat(MAX_TEXT))).ok,
+            "still full"
+        );
+        assert!(
+            t.execute("list 3").ok,
+            "extra arguments on list are ignored"
+        );
         assert!(t.execute("done 3").ok, "numbered completion still works");
     }
 
@@ -413,8 +478,13 @@ mod tests {
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            assert_eq!(std::fs::metadata(&file).unwrap().permissions().mode() & 0o777, 0o600);
+            assert_eq!(
+                std::fs::metadata(&file).unwrap().permissions().mode() & 0o777,
+                0o600
+            );
         }
-        assert!(std::fs::read_to_string(&file).unwrap().contains("secret-ish"));
+        assert!(std::fs::read_to_string(&file)
+            .unwrap()
+            .contains("secret-ish"));
     }
 }

@@ -102,11 +102,17 @@ pub struct Aegis {
 
 impl Aegis {
     pub fn new() -> Self {
-        Self { file: None, accounts: Vec::new(), warning: None }
+        Self {
+            file: None,
+            accounts: Vec::new(),
+            warning: None,
+        }
     }
 
     fn path(&self) -> Result<&Path, String> {
-        self.file.as_deref().ok_or_else(|| "2FA storage not initialised".to_string())
+        self.file
+            .as_deref()
+            .ok_or_else(|| "2FA storage not initialised".to_string())
     }
 
     fn load(file: &Path) -> (Vec<Account>, Option<String>) {
@@ -123,7 +129,8 @@ impl Aegis {
 
     fn save(&self) -> Result<(), String> {
         let path = self.path()?;
-        let json = serde_json::to_string_pretty(&self.accounts).map_err(|e| format!("save: {e}"))?;
+        let json =
+            serde_json::to_string_pretty(&self.accounts).map_err(|e| format!("save: {e}"))?;
         if let Some(dir) = path.parent() {
             std::fs::create_dir_all(dir).map_err(|e| format!("save: {e}"))?;
         }
@@ -143,9 +150,19 @@ impl Aegis {
         for (i, a) in self.accounts.iter().enumerate() {
             match a.code_at(now) {
                 Ok((code, left)) => {
-                    out.push_str(&format!("{:>2}. {:<28} {}  {:>2}s\n", i + 1, truncate(&a.label(), 28), group(&code), left));
+                    out.push_str(&format!(
+                        "{:>2}. {:<28} {}  {:>2}s\n",
+                        i + 1,
+                        truncate(&a.label(), 28),
+                        group(&code),
+                        left
+                    ));
                 }
-                Err(e) => out.push_str(&format!("{:>2}. {:<28} ! {e}\n", i + 1, truncate(&a.label(), 28))),
+                Err(e) => out.push_str(&format!(
+                    "{:>2}. {:<28} ! {e}\n",
+                    i + 1,
+                    truncate(&a.label(), 28)
+                )),
             }
         }
         out.push_str("\nCodes are generated on-device; nothing leaves the phone.");
@@ -160,7 +177,9 @@ impl Aegis {
         self.accounts
             .iter()
             .enumerate()
-            .filter(|(_, a)| a.label().to_ascii_lowercase().contains(&q) || a.issuer.to_ascii_lowercase() == q)
+            .filter(|(_, a)| {
+                a.label().to_ascii_lowercase().contains(&q) || a.issuer.to_ascii_lowercase() == q
+            })
             .map(|(i, _)| i)
             .collect()
     }
@@ -169,7 +188,10 @@ impl Aegis {
         if account.secret_bytes().is_err() {
             return Err("secret is not valid base32".into());
         }
-        if self.accounts.iter().any(|a| a.issuer.eq_ignore_ascii_case(&account.issuer) && a.account.eq_ignore_ascii_case(&account.account)) {
+        if self.accounts.iter().any(|a| {
+            a.issuer.eq_ignore_ascii_case(&account.issuer)
+                && a.account.eq_ignore_ascii_case(&account.account)
+        }) {
             return Err(format!("`{}` is already registered", account.label()));
         }
         self.accounts.push(account);
@@ -186,7 +208,10 @@ impl Aegis {
                 self.save()?;
                 Ok(format!("removed {}", removed.label()))
             }
-            _ => Err(format!("`{needle}` matches {} accounts; be more specific", hits.len())),
+            _ => Err(format!(
+                "`{needle}` matches {} accounts; be more specific",
+                hits.len()
+            )),
         }
     }
 
@@ -196,12 +221,23 @@ impl Aegis {
             0 => return Err(format!("no account matches `{needle}`")),
             1 => hits[0],
             _ => {
-                let names: Vec<String> = hits.iter().map(|&i| format!("  - {}", self.accounts[i].label())).collect();
-                return Err(format!("`{needle}` matches several accounts:\n{}", names.join("\n")));
+                let names: Vec<String> = hits
+                    .iter()
+                    .map(|&i| format!("  - {}", self.accounts[i].label()))
+                    .collect();
+                return Err(format!(
+                    "`{needle}` matches several accounts:\n{}",
+                    names.join("\n")
+                ));
             }
         };
         let (code, left) = self.accounts[idx].code_at(now_secs())?;
-        Ok(format!("{}\n{}   ({}s left)", self.accounts[idx].label(), group(&code), left))
+        Ok(format!(
+            "{}\n{}   ({}s left)",
+            self.accounts[idx].label(),
+            group(&code),
+            left
+        ))
     }
 
     /// Execute one terminal-style command.
@@ -218,7 +254,12 @@ impl Aegis {
         let outcome: Result<String, String> = match head.to_ascii_lowercase().as_str() {
             "help" | "?" => Ok(HELP.to_string()),
             "list" | "ls" => Ok(self.listing()),
-            "add" => parse_otpauth(rest).and_then(|a| self.add(a)).map(|_| format!("added {}", self.accounts.last().map(|a| a.label()).unwrap_or_default())),
+            "add" => parse_otpauth(rest).and_then(|a| self.add(a)).map(|_| {
+                format!(
+                    "added {}",
+                    self.accounts.last().map(|a| a.label()).unwrap_or_default()
+                )
+            }),
             "addraw" => {
                 let mut parts = rest.split_whitespace();
                 let (issuer, account, secret) = (parts.next(), parts.next(), parts.next());
@@ -308,7 +349,11 @@ pub fn hotp(secret: &[u8], counter: u64, digits: u32, algorithm: Algorithm) -> S
         | (mac[offset + 3] as u32);
     let digits = digits.clamp(1, 10);
     let modulus = 10u64.pow(digits);
-    format!("{:0width$}", binary as u64 % modulus, width = digits as usize)
+    format!(
+        "{:0width$}",
+        binary as u64 % modulus,
+        width = digits as usize
+    )
 }
 
 fn hmac_sha1(key: &[u8], message: &[u8]) -> Vec<u8> {
@@ -412,9 +457,22 @@ pub fn parse_otpauth(uri: &str) -> Result<Account, String> {
         match k.to_ascii_lowercase().as_str() {
             "secret" => secret = Some(v.trim().to_string()),
             "issuer" if !v.trim().is_empty() => issuer = v.trim().to_string(),
-            "digits" => digits = v.trim().parse::<u32>().map_err(|_| "invalid digits".to_string())?,
-            "period" => period = v.trim().parse::<u64>().map_err(|_| "invalid period".to_string())?,
-            "algorithm" => algorithm = Algorithm::parse(&v).ok_or_else(|| format!("unsupported algorithm `{v}`"))?,
+            "digits" => {
+                digits = v
+                    .trim()
+                    .parse::<u32>()
+                    .map_err(|_| "invalid digits".to_string())?
+            }
+            "period" => {
+                period = v
+                    .trim()
+                    .parse::<u64>()
+                    .map_err(|_| "invalid period".to_string())?
+            }
+            "algorithm" => {
+                algorithm =
+                    Algorithm::parse(&v).ok_or_else(|| format!("unsupported algorithm `{v}`"))?
+            }
             _ => {}
         }
     }
@@ -431,7 +489,14 @@ pub fn parse_otpauth(uri: &str) -> Result<Account, String> {
     if period == 0 || period > 3600 {
         return Err("period must be between 1 and 3600 seconds".into());
     }
-    let account = Account { issuer, account, secret, digits, period, algorithm };
+    let account = Account {
+        issuer,
+        account,
+        secret,
+        digits,
+        period,
+        algorithm,
+    };
     account.secret_bytes()?;
     Ok(account)
 }
@@ -481,14 +546,22 @@ fn group(code: &str) -> String {
 }
 
 fn now_secs() -> u64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
 }
 
 #[cfg(unix)]
 fn write_private(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     use std::io::Write;
     use std::os::unix::fs::OpenOptionsExt;
-    let mut f = std::fs::OpenOptions::new().write(true).create(true).truncate(true).mode(0o600).open(path)?;
+    let mut f = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(path)?;
     f.write_all(bytes)
 }
 
@@ -505,8 +578,11 @@ mod tests {
     fn ready() -> (tempfile::TempDir, Aegis) {
         let dir = tempfile::tempdir().unwrap();
         let mut m = Aegis::new();
-        m.init(&ModuleContext { data_dir: dir.path().to_string_lossy().into(), host: Host::detached("app-aegis") })
-            .unwrap();
+        m.init(&ModuleContext {
+            data_dir: dir.path().to_string_lossy().into(),
+            host: Host::detached("app-aegis"),
+        })
+        .unwrap();
         (dir, m)
     }
 
@@ -529,7 +605,11 @@ mod tests {
     #[test]
     fn rfc6238_sha256_vectors() {
         let secret = b"12345678901234567890123456789012";
-        let vectors = [(59, "46119246"), (1_111_111_109, "68084774"), (2_000_000_000, "90698825")];
+        let vectors = [
+            (59, "46119246"),
+            (1_111_111_109, "68084774"),
+            (2_000_000_000, "90698825"),
+        ];
         for (t, want) in vectors {
             assert_eq!(hotp(secret, t / 30, 8, Algorithm::Sha256), want, "t={t}");
         }
@@ -537,12 +617,23 @@ mod tests {
 
     #[test]
     fn base32_roundtrip_and_errors() {
-        for raw in [b"a".as_slice(), b"abcd", b"12345678901234567890", &[0xff, 0x00, 0x7f]] {
+        for raw in [
+            b"a".as_slice(),
+            b"abcd",
+            b"12345678901234567890",
+            &[0xff, 0x00, 0x7f],
+        ] {
             assert_eq!(base32_decode(&base32_encode(raw)).unwrap(), raw);
         }
-        assert_eq!(base32_decode("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ").unwrap(), b"12345678901234567890");
+        assert_eq!(
+            base32_decode("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ").unwrap(),
+            b"12345678901234567890"
+        );
         // lower case, spaces and padding are tolerated
-        assert_eq!(base32_decode("gezd gnbv gy3t qojq====").unwrap(), b"1234567890");
+        assert_eq!(
+            base32_decode("gezd gnbv gy3t qojq====").unwrap(),
+            b"1234567890"
+        );
         assert!(base32_decode("MZXW6YQ!").is_err());
         assert!(base32_decode("").is_err());
         assert!(base32_decode("A").is_err(), "5 leftover bits is truncated");
@@ -558,7 +649,8 @@ mod tests {
         assert_eq!(a.period, 60);
         assert_eq!(a.algorithm, Algorithm::Sha256);
         // Percent-encoded label and issuer
-        let b = parse_otpauth("otpauth://totp/My%20Bank:me%40example.com?secret=JBSWY3DPEHPK3PXP").unwrap();
+        let b = parse_otpauth("otpauth://totp/My%20Bank:me%40example.com?secret=JBSWY3DPEHPK3PXP")
+            .unwrap();
         assert_eq!(b.issuer, "My Bank");
         assert_eq!(b.account, "me@example.com");
         // Errors
@@ -573,14 +665,23 @@ mod tests {
     fn add_list_code_remove_and_persist() {
         let (dir, mut m) = ready();
         assert!(m.handle("launch", "").text.contains("No accounts"));
-        let out = m.handle("run", "add otpauth://totp/GitHub:octocat?secret=JBSWY3DPEHPK3PXP&issuer=GitHub");
+        let out = m.handle(
+            "run",
+            "add otpauth://totp/GitHub:octocat?secret=JBSWY3DPEHPK3PXP&issuer=GitHub",
+        );
         assert!(out.ok, "{}", out.text);
         let listing = m.handle("launch", "").text;
         assert!(listing.contains("GitHub (octocat)"), "{listing}");
         let code = m.handle("run", "code github");
         assert!(code.ok && code.text.contains("GitHub"), "{:?}", code);
         // duplicate and ambiguous handling
-        assert!(!m.handle("run", "add otpauth://totp/GitHub:octocat?secret=JBSWY3DPEHPK3PXP").ok);
+        assert!(
+            !m.handle(
+                "run",
+                "add otpauth://totp/GitHub:octocat?secret=JBSWY3DPEHPK3PXP"
+            )
+            .ok
+        );
         assert!(!m.handle("run", "code nobody").ok);
         assert!(m.handle("run", "rm github").ok);
         assert!(m.handle("launch", "").text.contains("No accounts"));
@@ -588,7 +689,10 @@ mod tests {
         // Persistence: a second instance re-reads the file.
         let mut second = Aegis::new();
         second
-            .init(&ModuleContext { data_dir: dir.path().to_string_lossy().into(), host: Host::detached("app-aegis") })
+            .init(&ModuleContext {
+                data_dir: dir.path().to_string_lossy().into(),
+                host: Host::detached("app-aegis"),
+            })
             .unwrap();
         assert!(second.handle("launch", "").text.contains("No accounts"));
     }
@@ -615,9 +719,15 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("accounts.json"), "{ not json").unwrap();
         let mut m = Aegis::new();
-        m.init(&ModuleContext { data_dir: dir.path().to_string_lossy().into(), host: Host::detached("app-aegis") })
-            .unwrap();
-        assert!(m.handle("launch", "").text.contains("could not read accounts"));
+        m.init(&ModuleContext {
+            data_dir: dir.path().to_string_lossy().into(),
+            host: Host::detached("app-aegis"),
+        })
+        .unwrap();
+        assert!(m
+            .handle("launch", "")
+            .text
+            .contains("could not read accounts"));
     }
 
     #[test]

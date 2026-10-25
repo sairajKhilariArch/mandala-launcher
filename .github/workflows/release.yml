@@ -171,7 +171,11 @@ jobs:
         run: |
           set -euo pipefail
           VERSION="${GITHUB_REF_NAME:-dev}"
-          cargo apk2 build --release --features android \
+          # --lib is required: mandala-shell also has a [[bin]] target, and
+          # cargo-apk2's artifact resolver then picks the bin and panics with
+          # "Bin is not compatible with Cdylib" *after* writing the APK, which
+          # still fails the step (exit 101).
+          cargo apk2 build --release --features android --lib \
             --target aarch64-linux-android -p mandala-shell
           APK=target/release/apk/mandala.apk
           if [ ! -f "$APK" ]; then

@@ -47,27 +47,48 @@ pub struct Rss {
 
 impl Rss {
     pub fn new() -> Self {
-        Self { data: None, feeds: Vec::new(), items: Vec::new(), warning: None }
+        Self {
+            data: None,
+            feeds: Vec::new(),
+            items: Vec::new(),
+            warning: None,
+        }
     }
 
     fn feeds_file(&self) -> Result<PathBuf, String> {
-        self.data.as_ref().map(|d| d.join("feeds.json")).ok_or_else(|| "reader storage not initialised".to_string())
+        self.data
+            .as_ref()
+            .map(|d| d.join("feeds.json"))
+            .ok_or_else(|| "reader storage not initialised".to_string())
     }
 
     fn cache_file(&self) -> Result<PathBuf, String> {
-        self.data.as_ref().map(|d| d.join("cache.json")).ok_or_else(|| "reader storage not initialised".to_string())
+        self.data
+            .as_ref()
+            .map(|d| d.join("cache.json"))
+            .ok_or_else(|| "reader storage not initialised".to_string())
     }
 
     fn save_feeds(&self) -> Result<(), String> {
         let path = self.feeds_file()?;
-        write_private(&path, serde_json::to_string_pretty(&self.feeds).map_err(|e| e.to_string())?.as_bytes())
-            .map_err(|e| e.to_string())
+        write_private(
+            &path,
+            serde_json::to_string_pretty(&self.feeds)
+                .map_err(|e| e.to_string())?
+                .as_bytes(),
+        )
+        .map_err(|e| e.to_string())
     }
 
     fn save_cache(&self) -> Result<(), String> {
         let path = self.cache_file()?;
-        write_private(&path, serde_json::to_string_pretty(&self.items).map_err(|e| e.to_string())?.as_bytes())
-            .map_err(|e| e.to_string())
+        write_private(
+            &path,
+            serde_json::to_string_pretty(&self.items)
+                .map_err(|e| e.to_string())?
+                .as_bytes(),
+        )
+        .map_err(|e| e.to_string())
     }
 
     fn validate_url(url: &str) -> Result<String, String> {
@@ -97,9 +118,19 @@ impl Rss {
         if self.feeds.len() >= 50 {
             return Err("feed list is full (50 feeds)".into());
         }
-        self.feeds.push(Feed { url: url.clone(), title: title.to_string() });
+        self.feeds.push(Feed {
+            url: url.clone(),
+            title: title.to_string(),
+        });
         self.save_feeds()?;
-        Ok(format!("subscribed to {url}{}", if title.is_empty() { String::new() } else { format!(" ({title})") }))
+        Ok(format!(
+            "subscribed to {url}{}",
+            if title.is_empty() {
+                String::new()
+            } else {
+                format!(" ({title})")
+            }
+        ))
     }
 
     fn remove(&mut self, fragment: &str) -> Result<String, String> {
@@ -111,7 +142,10 @@ impl Rss {
             .feeds
             .iter()
             .enumerate()
-            .filter(|(_, feed)| feed.url.to_ascii_lowercase().contains(&f) || feed.title.to_ascii_lowercase().contains(&f))
+            .filter(|(_, feed)| {
+                feed.url.to_ascii_lowercase().contains(&f)
+                    || feed.title.to_ascii_lowercase().contains(&f)
+            })
             .map(|(i, _)| i)
             .collect();
         match hits.len() {
@@ -119,9 +153,20 @@ impl Rss {
             1 => {
                 let removed = self.feeds.remove(hits[0]);
                 self.save_feeds()?;
-                Ok(format!("removed {} ({})", if removed.title.is_empty() { "feed" } else { &removed.title }, removed.url))
+                Ok(format!(
+                    "removed {} ({})",
+                    if removed.title.is_empty() {
+                        "feed"
+                    } else {
+                        &removed.title
+                    },
+                    removed.url
+                ))
             }
-            _ => Err(format!("`{fragment}` matches {} feeds; be more specific", hits.len())),
+            _ => Err(format!(
+                "`{fragment}` matches {} feeds; be more specific",
+                hits.len()
+            )),
         }
     }
 
@@ -158,7 +203,11 @@ impl Rss {
             self.items = merged;
             self.save_cache()?;
         }
-        let mut msg = format!("{fetched}/{} feed(s) updated, {} headline(s)", self.feeds.len(), self.items.len());
+        let mut msg = format!(
+            "{fetched}/{} feed(s) updated, {} headline(s)",
+            self.feeds.len(),
+            self.items.len()
+        );
         if !failures.is_empty() {
             msg.push_str(&format!("\nfailed:\n  {}", failures.join("\n  ")));
         }
@@ -178,7 +227,11 @@ impl Rss {
         }
         let mut out = format!("HEADLINES ({}), newest first\n\n", self.items.len());
         for (i, it) in self.items.iter().enumerate() {
-            let date = if it.published.is_empty() { "—".to_string() } else { it.published.chars().take(16).collect() };
+            let date = if it.published.is_empty() {
+                "—".to_string()
+            } else {
+                it.published.chars().take(16).collect()
+            };
             let title = truncate(&it.title, 72);
             let source = truncate(&it.source, 24);
             out.push_str(&format!("{:>3}. [{date}] {title}  ({source})\n", i + 1));
@@ -193,21 +246,50 @@ impl Rss {
         }
         self.feeds
             .iter()
-            .map(|f| format!("  {}\n    {}", if f.title.is_empty() { "(untitled)" } else { &f.title }, f.url))
+            .map(|f| {
+                format!(
+                    "  {}\n    {}",
+                    if f.title.is_empty() {
+                        "(untitled)"
+                    } else {
+                        &f.title
+                    },
+                    f.url
+                )
+            })
             .collect::<Vec<_>>()
             .join("\n")
     }
 
     fn read(&self, token: &str) -> Result<String, String> {
-        let n: usize = token.trim().trim_end_matches('.').parse().map_err(|_| format!("`{token}` is not a headline number"))?;
-        let it = self.items.get(n.wrapping_sub(1)).ok_or_else(|| format!("no headline {n}"))?;
+        let n: usize = token
+            .trim()
+            .trim_end_matches('.')
+            .parse()
+            .map_err(|_| format!("`{token}` is not a headline number"))?;
+        let it = self
+            .items
+            .get(n.wrapping_sub(1))
+            .ok_or_else(|| format!("no headline {n}"))?;
         Ok(format!(
             "{title}\nsource  {source}\npublished {published}\nlink    {link}\n\n{summary}",
             title = it.title,
-            source = if it.source.is_empty() { "unknown" } else { &it.source },
-            published = if it.published.is_empty() { "unknown" } else { &it.published },
+            source = if it.source.is_empty() {
+                "unknown"
+            } else {
+                &it.source
+            },
+            published = if it.published.is_empty() {
+                "unknown"
+            } else {
+                &it.published
+            },
             link = it.link,
-            summary = if it.summary.is_empty() { "(no summary in this feed)" } else { &it.summary }
+            summary = if it.summary.is_empty() {
+                "(no summary in this feed)"
+            } else {
+                &it.summary
+            }
         ))
     }
 
@@ -259,7 +341,10 @@ no analytics. Everything is cached in the module's private directory.";
 pub fn http_get(url: &str, max: usize) -> Result<String, String> {
     let mut response = ureq::get(url)
         .header("User-Agent", USER_AGENT)
-        .header("Accept", "application/rss+xml, application/atom+xml, application/xml, text/xml, */*")
+        .header(
+            "Accept",
+            "application/rss+xml, application/atom+xml, application/xml, text/xml, */*",
+        )
         .call()
         .map_err(|e| format!("fetch {url}: {e}"))?;
     let status = response.status().as_u16();
@@ -305,7 +390,10 @@ pub fn parse_feed(xml: &str, source: &str) -> Result<Vec<Item>, String> {
     };
 
     let mut items = Vec::new();
-    for node in doc.descendants().filter(|n| n.has_tag_name("item") || n.has_tag_name("entry")) {
+    for node in doc
+        .descendants()
+        .filter(|n| n.has_tag_name("item") || n.has_tag_name("entry"))
+    {
         let title = text_of(node, "title");
         let link = if node.has_tag_name("item") {
             text_of(node, "link")
@@ -319,16 +407,34 @@ pub fn parse_feed(xml: &str, source: &str) -> Result<Vec<Item>, String> {
         };
         let published = ["published", "updated", "pubDate", "date"]
             .iter()
-            .find_map(|tag| node.descendants().find(|n| n.has_tag_name(*tag)).and_then(|n| n.text()))
+            .find_map(|tag| {
+                node.descendants()
+                    .find(|n| n.has_tag_name(*tag))
+                    .and_then(|n| n.text())
+            })
             .unwrap_or("")
             .trim()
             .to_string();
-        let raw_summary = ["description", "summary", "content", "content:encoded", "subtitle"]
-            .iter()
-            .find_map(|tag| node.descendants().find(|n| n.has_tag_name(*tag)).and_then(|n| n.text()))
-            .unwrap_or("");
+        let raw_summary = [
+            "description",
+            "summary",
+            "content",
+            "content:encoded",
+            "subtitle",
+        ]
+        .iter()
+        .find_map(|tag| {
+            node.descendants()
+                .find(|n| n.has_tag_name(*tag))
+                .and_then(|n| n.text())
+        })
+        .unwrap_or("");
         items.push(Item {
-            title: if title.trim().is_empty() { "(untitled)".into() } else { truncate(title.trim(), MAX_TITLE) },
+            title: if title.trim().is_empty() {
+                "(untitled)".into()
+            } else {
+                truncate(title.trim(), MAX_TITLE)
+            },
             link: link.trim().to_string(),
             source: source.clone(),
             summary: truncate(&strip_html(raw_summary), MAX_SUMMARY),
@@ -342,7 +448,11 @@ pub fn parse_feed(xml: &str, source: &str) -> Result<Vec<Item>, String> {
 }
 
 fn text_of(node: roxmltree::Node, tag: &str) -> String {
-    node.children().find(|n| n.has_tag_name(tag)).and_then(|n| n.text()).unwrap_or("").to_string()
+    node.children()
+        .find(|n| n.has_tag_name(tag))
+        .and_then(|n| n.text())
+        .unwrap_or("")
+        .to_string()
 }
 
 /// Remove tags and decode the handful of entities feeds actually use.
@@ -373,7 +483,10 @@ fn truncate(s: &str, n: usize) -> String {
     if s.chars().count() <= n {
         s.to_string()
     } else {
-        format!("{}…", s.chars().take(n.saturating_sub(1)).collect::<String>())
+        format!(
+            "{}…",
+            s.chars().take(n.saturating_sub(1)).collect::<String>()
+        )
     }
 }
 
@@ -388,7 +501,12 @@ fn split_head(s: &str) -> (&str, &str) {
 fn write_private(path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()> {
     use std::io::Write;
     use std::os::unix::fs::OpenOptionsExt;
-    let mut f = std::fs::OpenOptions::new().write(true).create(true).truncate(true).mode(0o600).open(path)?;
+    let mut f = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(path)?;
     f.write_all(bytes)
 }
 
@@ -415,10 +533,11 @@ impl Module for Rss {
             .ok()
             .and_then(|t| serde_json::from_str(&t).ok())
             .unwrap_or_default();
-        if dir.join("feeds.json").exists() && serde_json::from_str::<Vec<Feed>>(
-            &std::fs::read_to_string(dir.join("feeds.json")).unwrap_or_default(),
-        )
-        .is_err()
+        if dir.join("feeds.json").exists()
+            && serde_json::from_str::<Vec<Feed>>(
+                &std::fs::read_to_string(dir.join("feeds.json")).unwrap_or_default(),
+            )
+            .is_err()
         {
             self.warning = Some("feeds.json was unreadable; starting empty".into());
         }
@@ -483,7 +602,11 @@ mod tests {
     fn ready() -> (tempfile::TempDir, Rss) {
         let dir = tempfile::tempdir().unwrap();
         let mut r = Rss::new();
-        r.init(&ModuleContext { data_dir: dir.path().to_string_lossy().into(), host: Host::detached("app-rss") }).unwrap();
+        r.init(&ModuleContext {
+            data_dir: dir.path().to_string_lossy().into(),
+            host: Host::detached("app-rss"),
+        })
+        .unwrap();
         (dir, r)
     }
 
@@ -534,7 +657,10 @@ mod tests {
     #[test]
     fn parse_errors_are_reported() {
         assert!(parse_feed("not xml at all", "x").is_err());
-        assert!(parse_feed("<rss><channel><title>t</title></channel></rss>", "x").is_err(), "no items");
+        assert!(
+            parse_feed("<rss><channel><title>t</title></channel></rss>", "x").is_err(),
+            "no items"
+        );
         assert!(parse_feed("html page", "x").is_err());
     }
 
@@ -543,18 +669,30 @@ mod tests {
         let (dir, mut r) = ready();
         assert!(!r.execute("fetch").ok, "fetch with no feeds errors");
         ok(&mut r, "add https://example.com/feed.xml Example");
-        assert!(!r.execute("add https://example.com/feed.xml").ok, "duplicate rejected");
+        assert!(
+            !r.execute("add https://example.com/feed.xml").ok,
+            "duplicate rejected"
+        );
         assert!(!r.execute("add ftp://example.com/x").ok, "scheme checked");
         assert!(!r.execute("add example.com/no-scheme").ok);
         assert!(!r.execute("add").ok);
         let feeds = ok(&mut r, "feeds");
-        assert!(feeds.contains("https://example.com/feed.xml") && feeds.contains("Example"), "{feeds}");
+        assert!(
+            feeds.contains("https://example.com/feed.xml") && feeds.contains("Example"),
+            "{feeds}"
+        );
 
         let mut second = Rss::new();
         second
-            .init(&ModuleContext { data_dir: dir.path().to_string_lossy().into(), host: Host::detached("app-rss") })
+            .init(&ModuleContext {
+                data_dir: dir.path().to_string_lossy().into(),
+                host: Host::detached("app-rss"),
+            })
             .unwrap();
-        assert!(second.handle("run", "feeds").text.contains("example.com/feed.xml"));
+        assert!(second
+            .handle("run", "feeds")
+            .text
+            .contains("example.com/feed.xml"));
 
         assert!(second.execute("rm example").ok, "removal succeeds");
         assert!(!second.execute("rm ghost").ok);
@@ -565,23 +703,38 @@ mod tests {
     fn fetch_from_a_local_server_caches_headlines() {
         let (dir, mut r) = ready();
         let port = serve_once(RSS_FIXTURE);
-        ok(&mut r, &format!("add http://127.0.0.1:{port}/feed.xml Test Feed"));
+        ok(
+            &mut r,
+            &format!("add http://127.0.0.1:{port}/feed.xml Test Feed"),
+        );
         let report = ok(&mut r, "fetch");
         assert!(report.contains("1/1 feed(s) updated"), "{report}");
 
         let heads = ok(&mut r, "");
-        assert!(heads.contains("First & foremost") && heads.contains("Second story"), "{heads}");
+        assert!(
+            heads.contains("First & foremost") && heads.contains("Second story"),
+            "{heads}"
+        );
         assert!(heads.contains("newest first"));
 
         let item = ok(&mut r, "read 1");
-        assert!(item.contains("https://example.com/2"), "newest first: {item}");
+        assert!(
+            item.contains("https://example.com/2"),
+            "newest first: {item}"
+        );
 
         // The cache survives a restart — headlines are available offline.
         let mut same = Rss::new();
-        same.init(&ModuleContext { data_dir: dir.path().to_string_lossy().into(), host: Host::detached("app-rss") })
-            .unwrap();
+        same.init(&ModuleContext {
+            data_dir: dir.path().to_string_lossy().into(),
+            host: Host::detached("app-rss"),
+        })
+        .unwrap();
         let heads = ok(&mut same, "");
-        assert!(heads.contains("Second story"), "cached headlines survive restart: {heads}");
+        assert!(
+            heads.contains("Second story"),
+            "cached headlines survive restart: {heads}"
+        );
     }
 
     #[test]

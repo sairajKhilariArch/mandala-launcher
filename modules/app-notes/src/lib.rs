@@ -25,7 +25,9 @@ impl Notes {
     }
 
     fn path(&self) -> Result<&PathBuf, ModuleReply> {
-        self.file.as_ref().ok_or_else(|| ModuleReply::err("notes storage not initialised"))
+        self.file
+            .as_ref()
+            .ok_or_else(|| ModuleReply::err("notes storage not initialised"))
     }
 
     fn recent(&self) -> ModuleReply {
@@ -36,10 +38,16 @@ impl Notes {
         let text = std::fs::read_to_string(path).unwrap_or_default();
         let lines: Vec<&str> = text.lines().collect();
         if lines.is_empty() {
-            return ModuleReply::ok("Notes are empty.\nType `note <text>` in the command bar to capture a thought.");
+            return ModuleReply::ok(
+                "Notes are empty.\nType `note <text>` in the command bar to capture a thought.",
+            );
         }
         let start = lines.len().saturating_sub(SHOW_LAST);
-        ModuleReply::ok(format!("NOTES ({} total)\n\n{}", lines.len(), lines[start..].join("\n")))
+        ModuleReply::ok(format!(
+            "NOTES ({} total)\n\n{}",
+            lines.len(),
+            lines[start..].join("\n")
+        ))
     }
 
     fn append(&self, payload: &str) -> ModuleReply {
@@ -52,12 +60,19 @@ impl Notes {
             return ModuleReply::err("nothing to save");
         }
         if note.len() > MAX_NOTE_BYTES {
-            return ModuleReply::err(format!("note too long ({} > {MAX_NOTE_BYTES} bytes)", note.len()));
+            return ModuleReply::err(format!(
+                "note too long ({} > {MAX_NOTE_BYTES} bytes)",
+                note.len()
+            ));
         }
         // One note == one line.
         let single_line = note.replace(['\r', '\n'], " ");
         let line = format!("{}  {}\n", timestamp(), single_line);
-        let result = OpenOptions::new().create(true).append(true).open(path).and_then(|mut f| f.write_all(line.as_bytes()));
+        let result = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+            .and_then(|mut f| f.write_all(line.as_bytes()));
         match result {
             Ok(()) => ModuleReply::ok(format!("Saved.\n{}", line.trim_end())),
             Err(e) => ModuleReply::err(format!("could not write notes: {e}")),
@@ -101,7 +116,10 @@ impl Module for Notes {
 
 /// `YYYY-MM-DD HH:MM` in UTC, without pulling in a date library.
 fn timestamp() -> String {
-    let secs = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+    let secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
     format_utc(secs)
 }
 
@@ -119,7 +137,11 @@ pub fn format_utc(secs: u64) -> String {
     let d = doy - (153 * mp + 2) / 5 + 1;
     let m = if mp < 10 { mp + 3 } else { mp - 9 };
     let y = if m <= 2 { y + 1 } else { y };
-    format!("{y:04}-{m:02}-{d:02} {:02}:{:02}", rem / 3600, (rem % 3600) / 60)
+    format!(
+        "{y:04}-{m:02}-{d:02} {:02}:{:02}",
+        rem / 3600,
+        (rem % 3600) / 60
+    )
 }
 
 declare_module!(Notes::new);
@@ -132,7 +154,11 @@ mod tests {
     fn ready() -> (tempfile::TempDir, Notes) {
         let dir = tempfile::tempdir().unwrap();
         let mut n = Notes::new();
-        n.init(&ModuleContext { data_dir: dir.path().to_string_lossy().into(), host: Host::detached("app-notes") }).unwrap();
+        n.init(&ModuleContext {
+            data_dir: dir.path().to_string_lossy().into(),
+            host: Host::detached("app-notes"),
+        })
+        .unwrap();
         (dir, n)
     }
 
@@ -151,7 +177,10 @@ mod tests {
         assert!(!n.handle("append", "   ").ok);
         n.handle("append", "a\nb\r\nc");
         let shown = n.handle("launch", "").text;
-        assert!(shown.contains("a b  c") || shown.contains("a b c"), "{shown}");
+        assert!(
+            shown.contains("a b  c") || shown.contains("a b c"),
+            "{shown}"
+        );
         assert!(shown.contains("1 total"));
     }
 
@@ -168,7 +197,9 @@ mod tests {
             n.handle("append", &format!("note-{i}"));
         }
         let shown = n.handle("launch", "").text;
-        assert!(shown.contains("20 total") && shown.contains("note-19") && !shown.contains("note-3\n"));
+        assert!(
+            shown.contains("20 total") && shown.contains("note-19") && !shown.contains("note-3\n")
+        );
         assert!(n.handle("clear", "").ok);
         assert!(n.handle("launch", "").text.contains("empty"));
     }

@@ -70,12 +70,21 @@ pub enum Action {
     QuerySubmitted,
     CloseOverlays,
     /// A module answered a request.
-    ModuleReply { module: String, ok: bool, text: String },
+    ModuleReply {
+        module: String,
+        ok: bool,
+        text: String,
+    },
     /// A host-side failure (not installed, quarantined, ...).
-    HostError { module: String, text: String },
+    HostError {
+        module: String,
+        text: String,
+    },
     MonitorUpdated(String),
     /// Result of a theme switch attempt.
-    ThemeApplied { id: String },
+    ThemeApplied {
+        id: String,
+    },
     Notice(String),
     /// User pressed a button on the process monitor.
     MonitorUnloadAll,
@@ -84,7 +93,11 @@ pub enum Action {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Effect {
-    CallModule { module: String, action: String, payload: String },
+    CallModule {
+        module: String,
+        action: String,
+        payload: String,
+    },
     RefreshMonitor,
     UnloadAll,
     RestartAll,
@@ -153,7 +166,11 @@ pub fn reduce(state: &mut AppState, action: Action) -> Vec<Effect> {
                 Some(slot) => {
                     state.active_module = Some(slot.id.to_string());
                     state.canvas_text = format!("Opening {}...", slot.label);
-                    fx.push(Effect::CallModule { module: slot.id.into(), action: "launch".into(), payload: String::new() });
+                    fx.push(Effect::CallModule {
+                        module: slot.id.into(),
+                        action: "launch".into(),
+                        payload: String::new(),
+                    });
                 }
             }
         }
@@ -176,32 +193,60 @@ pub fn reduce(state: &mut AppState, action: Action) -> Vec<Effect> {
                 Command::Empty => {}
                 Command::Calc(expr) => {
                     state.active_module = Some("app-calculator".into());
-                    fx.push(Effect::CallModule { module: "app-calculator".into(), action: "eval".into(), payload: expr });
+                    fx.push(Effect::CallModule {
+                        module: "app-calculator".into(),
+                        action: "eval".into(),
+                        payload: expr,
+                    });
                 }
                 Command::CalcSave(expr) => {
                     state.active_module = Some("app-calculator".into());
-                    fx.push(Effect::CallModule { module: "app-calculator".into(), action: "save".into(), payload: expr });
+                    fx.push(Effect::CallModule {
+                        module: "app-calculator".into(),
+                        action: "save".into(),
+                        payload: expr,
+                    });
                 }
                 Command::Note(text) => {
                     state.active_module = Some("app-notes".into());
-                    fx.push(Effect::CallModule { module: "app-notes".into(), action: "append".into(), payload: text });
+                    fx.push(Effect::CallModule {
+                        module: "app-notes".into(),
+                        action: "append".into(),
+                        payload: text,
+                    });
                 }
                 Command::Terminal(cmd) => {
                     state.active_module = Some("app-terminal".into());
                     state.canvas_text = format!("> {cmd}");
-                    fx.push(Effect::CallModule { module: "app-terminal".into(), action: "run".into(), payload: cmd });
+                    fx.push(Effect::CallModule {
+                        module: "app-terminal".into(),
+                        action: "run".into(),
+                        payload: cmd,
+                    });
                 }
                 Command::Aegis(cmd) => {
                     state.active_module = Some("app-aegis".into());
-                    fx.push(Effect::CallModule { module: "app-aegis".into(), action: "run".into(), payload: cmd });
+                    fx.push(Effect::CallModule {
+                        module: "app-aegis".into(),
+                        action: "run".into(),
+                        payload: cmd,
+                    });
                 }
                 Command::Vault(cmd) => {
                     state.active_module = Some("app-vault".into());
-                    fx.push(Effect::CallModule { module: "app-vault".into(), action: "run".into(), payload: cmd });
+                    fx.push(Effect::CallModule {
+                        module: "app-vault".into(),
+                        action: "run".into(),
+                        payload: cmd,
+                    });
                 }
                 Command::LocalSend(cmd) => {
                     state.active_module = Some("app-localsend".into());
-                    fx.push(Effect::CallModule { module: "app-localsend".into(), action: "run".into(), payload: cmd });
+                    fx.push(Effect::CallModule {
+                        module: "app-localsend".into(),
+                        action: "run".into(),
+                        payload: cmd,
+                    });
                 }
                 Command::Wallpaper(path) => {
                     state.active_module = None;
@@ -210,31 +255,59 @@ pub fn reduce(state: &mut AppState, action: Action) -> Vec<Effect> {
                 Command::Overlay => fx.push(Effect::RequestOverlay),
                 Command::Weather(cmd) => {
                     state.active_module = Some("app-weather".into());
-                    fx.push(Effect::CallModule { module: "app-weather".into(), action: "run".into(), payload: cmd });
+                    fx.push(Effect::CallModule {
+                        module: "app-weather".into(),
+                        action: "run".into(),
+                        payload: cmd,
+                    });
                 }
                 Command::Rss(cmd) => {
                     state.active_module = Some("app-rss".into());
-                    fx.push(Effect::CallModule { module: "app-rss".into(), action: "run".into(), payload: cmd });
+                    fx.push(Effect::CallModule {
+                        module: "app-rss".into(),
+                        action: "run".into(),
+                        payload: cmd,
+                    });
                 }
                 Command::Tasks(cmd) => {
                     state.active_module = Some("app-tasks".into());
-                    fx.push(Effect::CallModule { module: "app-tasks".into(), action: "run".into(), payload: cmd });
+                    fx.push(Effect::CallModule {
+                        module: "app-tasks".into(),
+                        action: "run".into(),
+                        payload: cmd,
+                    });
                 }
                 Command::Reader(cmd) => {
                     state.active_module = Some("app-reader".into());
-                    fx.push(Effect::CallModule { module: "app-reader".into(), action: "run".into(), payload: cmd });
+                    fx.push(Effect::CallModule {
+                        module: "app-reader".into(),
+                        action: "run".into(),
+                        payload: cmd,
+                    });
                 }
                 Command::Gallery(cmd) => {
                     state.active_module = Some("app-gallery".into());
-                    fx.push(Effect::CallModule { module: "app-gallery".into(), action: "run".into(), payload: cmd });
+                    fx.push(Effect::CallModule {
+                        module: "app-gallery".into(),
+                        action: "run".into(),
+                        payload: cmd,
+                    });
                 }
                 Command::Chat(cmd) => {
                     state.active_module = Some("app-chat".into());
-                    fx.push(Effect::CallModule { module: "app-chat".into(), action: "run".into(), payload: cmd });
+                    fx.push(Effect::CallModule {
+                        module: "app-chat".into(),
+                        action: "run".into(),
+                        payload: cmd,
+                    });
                 }
                 Command::Ai(cmd) => {
                     state.active_module = Some("app-ai".into());
-                    fx.push(Effect::CallModule { module: "app-ai".into(), action: "run".into(), payload: cmd });
+                    fx.push(Effect::CallModule {
+                        module: "app-ai".into(),
+                        action: "run".into(),
+                        payload: cmd,
+                    });
                 }
                 Command::Camera => {
                     state.active_module = None;
@@ -253,7 +326,9 @@ pub fn reduce(state: &mut AppState, action: Action) -> Vec<Effect> {
 
         Action::ModuleReply { module, ok, text } => {
             // Ignore stale replies from a module the user already left.
-            if state.active_module.as_deref() == Some(module.as_str()) || state.active_module.is_none() {
+            if state.active_module.as_deref() == Some(module.as_str())
+                || state.active_module.is_none()
+            {
                 state.canvas_text = if ok { text } else { format!("! {text}") };
             }
         }
@@ -291,9 +366,15 @@ pub fn reduce(state: &mut AppState, action: Action) -> Vec<Effect> {
 /// Text listing for the All-Apps drawer / live search results.
 pub fn describe_all_apps(query: &str) -> String {
     let rows: Vec<String> = if query.trim().is_empty() {
-        SLOTS.iter().map(|s| format!("{}  {}", s.tag(), s.label)).collect()
+        SLOTS
+            .iter()
+            .map(|s| format!("{}  {}", s.tag(), s.label))
+            .collect()
     } else {
-        search_slots(query, 8).iter().map(|s| format!("{}  {}", s.tag(), s.label)).collect()
+        search_slots(query, 8)
+            .iter()
+            .map(|s| format!("{}  {}", s.tag(), s.label))
+            .collect()
     };
     if rows.is_empty() {
         format!("No app matches `{}`.", query.trim())
@@ -366,7 +447,14 @@ mod tests {
         let fx = reduce(&mut s, Action::OpenSlot("app-notes".into()));
         assert!(!s.left_open);
         assert_eq!(s.active_module.as_deref(), Some("app-notes"));
-        assert_eq!(fx, vec![Effect::CallModule { module: "app-notes".into(), action: "launch".into(), payload: "".into() }]);
+        assert_eq!(
+            fx,
+            vec![Effect::CallModule {
+                module: "app-notes".into(),
+                action: "launch".into(),
+                payload: "".into()
+            }]
+        );
     }
 
     #[test]
@@ -392,70 +480,173 @@ mod tests {
         s.query = "= 1+1".into();
         let fx = reduce(&mut s, Action::QuerySubmitted);
         assert_eq!(s.query, "");
-        assert_eq!(fx, vec![Effect::CallModule { module: "app-calculator".into(), action: "eval".into(), payload: "1+1".into() }]);
+        assert_eq!(
+            fx,
+            vec![Effect::CallModule {
+                module: "app-calculator".into(),
+                action: "eval".into(),
+                payload: "1+1".into()
+            }]
+        );
 
         s.query = "note hello".into();
         let fx = reduce(&mut s, Action::QuerySubmitted);
-        assert_eq!(fx, vec![Effect::CallModule { module: "app-notes".into(), action: "append".into(), payload: "hello".into() }]);
+        assert_eq!(
+            fx,
+            vec![Effect::CallModule {
+                module: "app-notes".into(),
+                action: "append".into(),
+                payload: "hello".into()
+            }]
+        );
 
         s.query = "theme next".into();
-        assert_eq!(reduce(&mut s, Action::QuerySubmitted), vec![Effect::SetTheme("next".into())]);
+        assert_eq!(
+            reduce(&mut s, Action::QuerySubmitted),
+            vec![Effect::SetTheme("next".into())]
+        );
 
         s.query = "monitor".into();
-        assert_eq!(reduce(&mut s, Action::QuerySubmitted), vec![Effect::RefreshMonitor]);
+        assert_eq!(
+            reduce(&mut s, Action::QuerySubmitted),
+            vec![Effect::RefreshMonitor]
+        );
         assert!(s.monitor_open);
 
         s.query = "> ls".into();
         let fx = reduce(&mut s, Action::QuerySubmitted);
-        assert_eq!(fx, vec![Effect::CallModule { module: "app-terminal".into(), action: "run".into(), payload: "ls".into() }]);
+        assert_eq!(
+            fx,
+            vec![Effect::CallModule {
+                module: "app-terminal".into(),
+                action: "run".into(),
+                payload: "ls".into()
+            }]
+        );
         assert_eq!(s.active_module.as_deref(), Some("app-terminal"));
 
         s.query = "2fa code github".into();
         let fx = reduce(&mut s, Action::QuerySubmitted);
-        assert_eq!(fx, vec![Effect::CallModule { module: "app-aegis".into(), action: "run".into(), payload: "code github".into() }]);
+        assert_eq!(
+            fx,
+            vec![Effect::CallModule {
+                module: "app-aegis".into(),
+                action: "run".into(),
+                payload: "code github".into()
+            }]
+        );
 
         s.query = "vault list".into();
         let fx = reduce(&mut s, Action::QuerySubmitted);
-        assert_eq!(fx, vec![Effect::CallModule { module: "app-vault".into(), action: "run".into(), payload: "list".into() }]);
+        assert_eq!(
+            fx,
+            vec![Effect::CallModule {
+                module: "app-vault".into(),
+                action: "run".into(),
+                payload: "list".into()
+            }]
+        );
 
         s.query = "lsend recv 8080 tok!".into();
         let fx = reduce(&mut s, Action::QuerySubmitted);
-        assert_eq!(fx, vec![Effect::CallModule { module: "app-localsend".into(), action: "run".into(), payload: "recv 8080 tok!".into() }]);
+        assert_eq!(
+            fx,
+            vec![Effect::CallModule {
+                module: "app-localsend".into(),
+                action: "run".into(),
+                payload: "recv 8080 tok!".into()
+            }]
+        );
 
         s.query = "wallpaper /sdcard/a.png".into();
-        assert_eq!(reduce(&mut s, Action::QuerySubmitted), vec![Effect::SetWallpaper("/sdcard/a.png".into())]);
+        assert_eq!(
+            reduce(&mut s, Action::QuerySubmitted),
+            vec![Effect::SetWallpaper("/sdcard/a.png".into())]
+        );
 
         s.query = "overlay".into();
-        assert_eq!(reduce(&mut s, Action::QuerySubmitted), vec![Effect::RequestOverlay]);
+        assert_eq!(
+            reduce(&mut s, Action::QuerySubmitted),
+            vec![Effect::RequestOverlay]
+        );
 
         s.query = "weather Berlin".into();
         let fx = reduce(&mut s, Action::QuerySubmitted);
-        assert_eq!(fx, vec![Effect::CallModule { module: "app-weather".into(), action: "run".into(), payload: "Berlin".into() }]);
+        assert_eq!(
+            fx,
+            vec![Effect::CallModule {
+                module: "app-weather".into(),
+                action: "run".into(),
+                payload: "Berlin".into()
+            }]
+        );
         assert_eq!(s.active_module.as_deref(), Some("app-weather"));
 
         s.query = "rss headlines".into();
         let fx = reduce(&mut s, Action::QuerySubmitted);
-        assert_eq!(fx, vec![Effect::CallModule { module: "app-rss".into(), action: "run".into(), payload: "headlines".into() }]);
+        assert_eq!(
+            fx,
+            vec![Effect::CallModule {
+                module: "app-rss".into(),
+                action: "run".into(),
+                payload: "headlines".into()
+            }]
+        );
 
         s.query = "tasks add call mom".into();
         let fx = reduce(&mut s, Action::QuerySubmitted);
-        assert_eq!(fx, vec![Effect::CallModule { module: "app-tasks".into(), action: "run".into(), payload: "add call mom".into() }]);
+        assert_eq!(
+            fx,
+            vec![Effect::CallModule {
+                module: "app-tasks".into(),
+                action: "run".into(),
+                payload: "add call mom".into()
+            }]
+        );
 
         s.query = "doc open 2".into();
         let fx = reduce(&mut s, Action::QuerySubmitted);
-        assert_eq!(fx, vec![Effect::CallModule { module: "app-reader".into(), action: "run".into(), payload: "open 2".into() }]);
+        assert_eq!(
+            fx,
+            vec![Effect::CallModule {
+                module: "app-reader".into(),
+                action: "run".into(),
+                payload: "open 2".into()
+            }]
+        );
 
         s.query = "gallery list".into();
         let fx = reduce(&mut s, Action::QuerySubmitted);
-        assert_eq!(fx, vec![Effect::CallModule { module: "app-gallery".into(), action: "run".into(), payload: "list".into() }]);
+        assert_eq!(
+            fx,
+            vec![Effect::CallModule {
+                module: "app-gallery".into(),
+                action: "run".into(),
+                payload: "list".into()
+            }]
+        );
 
         s.query = "chat rooms".into();
         let fx = reduce(&mut s, Action::QuerySubmitted);
-        assert_eq!(fx, vec![Effect::CallModule { module: "app-chat".into(), action: "run".into(), payload: "rooms".into() }]);
+        assert_eq!(
+            fx,
+            vec![Effect::CallModule {
+                module: "app-chat".into(),
+                action: "run".into(),
+                payload: "rooms".into()
+            }]
+        );
 
         s.query = "ask explain tls".into();
         let fx = reduce(&mut s, Action::QuerySubmitted);
-        assert_eq!(fx, vec![Effect::CallModule { module: "app-ai".into(), action: "run".into(), payload: "ask explain tls".into() }]);
+        assert_eq!(
+            fx,
+            vec![Effect::CallModule {
+                module: "app-ai".into(),
+                action: "run".into(),
+                payload: "ask explain tls".into()
+            }]
+        );
 
         s.query = "camera".into();
         assert_eq!(reduce(&mut s, Action::QuerySubmitted), vec![Effect::Camera]);
@@ -476,9 +667,23 @@ mod tests {
         let mut s = st();
         s.active_module = Some("app-notes".into());
         s.canvas_text = "notes".into();
-        reduce(&mut s, Action::ModuleReply { module: "app-calculator".into(), ok: true, text: "4".into() });
+        reduce(
+            &mut s,
+            Action::ModuleReply {
+                module: "app-calculator".into(),
+                ok: true,
+                text: "4".into(),
+            },
+        );
         assert_eq!(s.canvas_text, "notes");
-        reduce(&mut s, Action::ModuleReply { module: "app-notes".into(), ok: false, text: "boom".into() });
+        reduce(
+            &mut s,
+            Action::ModuleReply {
+                module: "app-notes".into(),
+                ok: false,
+                text: "boom".into(),
+            },
+        );
         assert_eq!(s.canvas_text, "! boom");
     }
 
@@ -486,7 +691,13 @@ mod tests {
     fn host_error_clears_active_module() {
         let mut s = st();
         s.active_module = Some("app-vault".into());
-        reduce(&mut s, Action::HostError { module: "app-vault".into(), text: "quarantined".into() });
+        reduce(
+            &mut s,
+            Action::HostError {
+                module: "app-vault".into(),
+                text: "quarantined".into(),
+            },
+        );
         assert_eq!(s.active_module, None);
         assert!(s.canvas_text.starts_with("! "));
     }
@@ -503,7 +714,13 @@ mod tests {
     #[test]
     fn monitor_buttons_emit_effects() {
         let mut s = st();
-        assert_eq!(reduce(&mut s, Action::MonitorUnloadAll), vec![Effect::UnloadAll, Effect::RefreshMonitor]);
-        assert_eq!(reduce(&mut s, Action::MonitorRestartAll), vec![Effect::RestartAll, Effect::RefreshMonitor]);
+        assert_eq!(
+            reduce(&mut s, Action::MonitorUnloadAll),
+            vec![Effect::UnloadAll, Effect::RefreshMonitor]
+        );
+        assert_eq!(
+            reduce(&mut s, Action::MonitorRestartAll),
+            vec![Effect::RestartAll, Effect::RefreshMonitor]
+        );
     }
 }

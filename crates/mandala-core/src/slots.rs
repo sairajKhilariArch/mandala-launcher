@@ -43,7 +43,13 @@ impl SlotDef {
 
 macro_rules! slot {
     ($p:ident, $i:expr, $id:expr, $label:expr) => {
-        SlotDef { panel: Panel::$p, index: $i, id: $id, label: $label, kind: SlotKind::Module }
+        SlotDef {
+            panel: Panel::$p,
+            index: $i,
+            id: $id,
+            label: $label,
+            kind: SlotKind::Module,
+        }
     };
 }
 
@@ -51,7 +57,13 @@ pub const SLOTS: [SlotDef; 15] = [
     // Panel A: bottom dock
     slot!(A, 1, "app-terminal", "Terminal"),
     slot!(A, 2, "app-notes", "Notes"),
-    SlotDef { panel: Panel::A, index: 3, id: "app-drawer", label: "All Apps", kind: SlotKind::BuiltinAllApps },
+    SlotDef {
+        panel: Panel::A,
+        index: 3,
+        id: "app-drawer",
+        label: "All Apps",
+        kind: SlotKind::BuiltinAllApps,
+    },
     slot!(A, 4, "app-chat", "Secure Chat"),
     slot!(A, 5, "app-ai", "AI Assistant"),
     // Panel B: left drawer
@@ -82,7 +94,10 @@ pub fn by_tag(tag: &str) -> Option<&'static SlotDef> {
 
 /// Ids of all slots that are backed by a loadable module.
 pub fn module_ids() -> impl Iterator<Item = &'static str> {
-    SLOTS.iter().filter(|s| s.kind == SlotKind::Module).map(|s| s.id)
+    SLOTS
+        .iter()
+        .filter(|s| s.kind == SlotKind::Module)
+        .map(|s| s.id)
 }
 
 #[cfg(test)]

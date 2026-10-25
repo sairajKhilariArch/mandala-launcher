@@ -35,6 +35,9 @@ pub enum MandalaError {
 
 impl MandalaError {
     pub fn io(path: impl AsRef<std::path::Path>, source: std::io::Error) -> Self {
-        Self::Io { path: path.as_ref().display().to_string(), source }
+        Self::Io {
+            path: path.as_ref().display().to_string(),
+            source,
+        }
     }
 }

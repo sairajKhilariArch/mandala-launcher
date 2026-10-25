@@ -1,8 +1,8 @@
 //! Mandala launcher entry points (desktop `main` and Android `android_main`).
 
-mod app;
 #[cfg(target_os = "android")]
 mod android;
+mod app;
 
 use anyhow::Context;
 use app::App;
@@ -39,7 +39,10 @@ fn run_inner(paths: HostPaths, exit_after_boot: bool) -> anyhow::Result<()> {
     let trust = TrustStore::load_dir(&paths.trust_dir()).context("loading trusted keys")?;
     let no_keys = trust.is_empty();
     if no_keys {
-        log::warn!("no trusted public keys in {}: every module will be rejected", paths.trust_dir().display());
+        log::warn!(
+            "no trusted public keys in {}: every module will be rejected",
+            paths.trust_dir().display()
+        );
     }
 
     let after_trust = boot.elapsed();
@@ -68,13 +71,21 @@ fn run_inner(paths: HostPaths, exit_after_boot: bool) -> anyhow::Result<()> {
     let after_window = boot.elapsed();
     mandala_ui::populate_slots(&ui);
 
-    let app = App::new(broker.clone(), host.clone(), themes, runtime.handle().clone(), ui.as_weak());
+    let app = App::new(
+        broker.clone(),
+        host.clone(),
+        themes,
+        runtime.handle().clone(),
+        ui.as_weak(),
+    );
     app.apply_current_theme(&ui);
 
     // Messages addressed to the host flow back into the reducer.
     {
         let app = app.clone();
-        runtime.spawn(run_router(rx, broker, host, move |env| app.on_host_envelope(env)));
+        runtime.spawn(run_router(rx, broker, host, move |env| {
+            app.on_host_envelope(env)
+        }));
     }
 
     ui.on_slot_activated({
@@ -191,7 +202,10 @@ pub fn selftest(paths: HostPaths) -> anyhow::Result<()> {
         }
     }
     if failures > 0 {
-        anyhow::bail!("{failures} of {} modules failed", slots::module_ids().count());
+        anyhow::bail!(
+            "{failures} of {} modules failed",
+            slots::module_ids().count()
+        );
     }
     println!("selftest passed: {loaded} modules loaded, {skipped} slots without a module");
     Ok(())

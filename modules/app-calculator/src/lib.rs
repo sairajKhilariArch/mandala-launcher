@@ -17,7 +17,9 @@ pub struct Calculator {
 
 impl Calculator {
     pub fn new() -> Self {
-        Self { host: Host::detached("app-calculator") }
+        Self {
+            host: Host::detached("app-calculator"),
+        }
     }
 }
 
@@ -52,7 +54,9 @@ impl Module for Calculator {
                     let line = format!("{} = {}", payload.trim(), format_number(v));
                     match self.host.send("app-notes", "append", &line) {
                         Ok(()) => ModuleReply::ok(format!("{line}\n(sent to Notes)")),
-                        Err(code) => ModuleReply::ok(format!("{line}\n(could not reach Notes: code {code})")),
+                        Err(code) => {
+                            ModuleReply::ok(format!("{line}\n(could not reach Notes: code {code})"))
+                        }
                     }
                 }
                 Err(e) => ModuleReply::err(e),
@@ -72,7 +76,11 @@ pub fn evaluate(input: &str) -> Result<f64, String> {
     if input.len() > MAX_INPUT {
         return Err(format!("expression too long (max {MAX_INPUT} chars)"));
     }
-    let mut p = Parser { chars: input.chars().collect(), pos: 0, depth: 0 };
+    let mut p = Parser {
+        chars: input.chars().collect(),
+        pos: 0,
+        depth: 0,
+    };
     p.skip_ws();
     if p.at_end() {
         return Err("empty expression".into());
@@ -80,7 +88,11 @@ pub fn evaluate(input: &str) -> Result<f64, String> {
     let v = p.expr()?;
     p.skip_ws();
     if !p.at_end() {
-        return Err(format!("unexpected `{}` at position {}", p.chars[p.pos], p.pos + 1));
+        return Err(format!(
+            "unexpected `{}` at position {}",
+            p.chars[p.pos],
+            p.pos + 1
+        ));
     }
     check(v)
 }
@@ -105,7 +117,11 @@ pub fn format_number(v: f64) -> String {
     }
     let s = format!("{v:.10}");
     let s = s.trim_end_matches('0').trim_end_matches('.');
-    if s == "-0" { "0".into() } else { s.to_string() }
+    if s == "-0" {
+        "0".into()
+    } else {
+        s.to_string()
+    }
 }
 
 struct Parser {
@@ -231,7 +247,10 @@ impl Parser {
 
     fn number(&mut self) -> Result<f64, String> {
         let start = self.pos;
-        while self.peek().map_or(false, |c| c.is_ascii_digit() || c == '.') {
+        while self
+            .peek()
+            .map_or(false, |c| c.is_ascii_digit() || c == '.')
+        {
             self.pos += 1;
         }
         // optional exponent: e/E followed by optional sign and digits
@@ -250,7 +269,8 @@ impl Parser {
             }
         }
         let text: String = self.chars[start..self.pos].iter().collect();
-        text.parse::<f64>().map_err(|_| format!("invalid number `{text}`"))
+        text.parse::<f64>()
+            .map_err(|_| format!("invalid number `{text}`"))
     }
 
     fn ident(&mut self) -> Result<f64, String> {
@@ -258,7 +278,10 @@ impl Parser {
         while self.peek().map_or(false, |c| c.is_ascii_alphanumeric()) {
             self.pos += 1;
         }
-        let name: String = self.chars[start..self.pos].iter().collect::<String>().to_ascii_lowercase();
+        let name: String = self.chars[start..self.pos]
+            .iter()
+            .collect::<String>()
+            .to_ascii_lowercase();
         self.skip_ws();
         if self.peek() == Some('(') {
             self.pos += 1;
@@ -324,7 +347,10 @@ mod tests {
         assert!((ev("sin(pi/2)") - 1.0).abs() < 1e-12);
         assert!((ev("ln(e)") - 1.0).abs() < 1e-12);
         assert!((ev("log(1000)") - 3.0).abs() < 1e-12);
-        assert_eq!(ev("abs(-3)+floor(2.9)+ceil(2.1)+round(2.5)"), 3.0 + 2.0 + 3.0 + 3.0);
+        assert_eq!(
+            ev("abs(-3)+floor(2.9)+ceil(2.1)+round(2.5)"),
+            3.0 + 2.0 + 3.0 + 3.0
+        );
         assert_eq!(ev("SQRT(9)"), 3.0);
     }
 
@@ -337,14 +363,21 @@ mod tests {
 
     #[test]
     fn errors_are_reported_not_panics() {
-        for bad in ["", "   ", "1/0", "5 % 0", "sqrt(-1)", "ln(0)", "1+", "(1", "1)", "foo", "foo(1)", "2 $ 3", "1..2", "((((", "10^1000"] {
+        for bad in [
+            "", "   ", "1/0", "5 % 0", "sqrt(-1)", "ln(0)", "1+", "(1", "1)", "foo", "foo(1)",
+            "2 $ 3", "1..2", "((((", "10^1000",
+        ] {
             assert!(evaluate(bad).is_err(), "{bad:?} should fail");
         }
     }
 
     #[test]
     fn depth_and_length_limits() {
-        let deep = format!("{}1{}", "(".repeat(MAX_DEPTH + 5), ")".repeat(MAX_DEPTH + 5));
+        let deep = format!(
+            "{}1{}",
+            "(".repeat(MAX_DEPTH + 5),
+            ")".repeat(MAX_DEPTH + 5)
+        );
         assert!(evaluate(&deep).unwrap_err().contains("deeply"));
         assert!(evaluate(&"1+".repeat(400)).is_err());
         let minus = "-".repeat(10_000);

@@ -26,7 +26,11 @@ impl HostPaths {
 
     /// `$MANDALA_HOME`, else `./mandala-home`.
     pub fn from_env() -> Self {
-        Self::new(std::env::var_os("MANDALA_HOME").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("mandala-home")))
+        Self::new(
+            std::env::var_os("MANDALA_HOME")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| PathBuf::from("mandala-home")),
+        )
     }
 
     pub fn modules_dir(&self) -> PathBuf {
@@ -49,7 +53,8 @@ impl HostPaths {
     }
 
     pub fn module_file(&self, id: &str) -> PathBuf {
-        self.modules_dir().join(format!("{id}.{}", std::env::consts::DLL_EXTENSION))
+        self.modules_dir()
+            .join(format!("{id}.{}", std::env::consts::DLL_EXTENSION))
     }
 
     pub fn signature_file(&self, id: &str) -> PathBuf {
@@ -60,7 +65,14 @@ impl HostPaths {
 
     /// Create the directory tree. `runtime/` is made owner-only on Unix.
     pub fn ensure(&self) -> Result<()> {
-        for d in [self.modules_dir(), self.trust_dir(), self.themes_dir(), self.root.join("data"), self.runtime_dir(), self.quarantine_dir()] {
+        for d in [
+            self.modules_dir(),
+            self.trust_dir(),
+            self.themes_dir(),
+            self.root.join("data"),
+            self.runtime_dir(),
+            self.quarantine_dir(),
+        ] {
             std::fs::create_dir_all(&d).map_err(|e| MandalaError::io(&d, e))?;
         }
         restrict_dir(&self.runtime_dir())?;
@@ -72,7 +84,8 @@ impl HostPaths {
 #[cfg(unix)]
 fn restrict_dir(p: &Path) -> Result<()> {
     use std::os::unix::fs::PermissionsExt;
-    std::fs::set_permissions(p, std::fs::Permissions::from_mode(0o700)).map_err(|e| MandalaError::io(p, e))
+    std::fs::set_permissions(p, std::fs::Permissions::from_mode(0o700))
+        .map_err(|e| MandalaError::io(p, e))
 }
 
 #[cfg(not(unix))]

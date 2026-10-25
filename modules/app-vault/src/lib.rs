@@ -57,11 +57,18 @@ pub struct Vault {
 
 impl Vault {
     pub fn new() -> Self {
-        Self { file: None, key: None, salt: None, entries: Vec::new() }
+        Self {
+            file: None,
+            key: None,
+            salt: None,
+            entries: Vec::new(),
+        }
     }
 
     fn path(&self) -> Result<&Path, String> {
-        self.file.as_deref().ok_or_else(|| "vault storage not initialised".to_string())
+        self.file
+            .as_deref()
+            .ok_or_else(|| "vault storage not initialised".to_string())
     }
 
     pub fn is_unlocked(&self) -> bool {
@@ -70,7 +77,8 @@ impl Vault {
 
     /// Derive the vault key from a passphrase and salt.
     fn derive(passphrase: &str, salt: &[u8]) -> Result<[u8; KEY_LEN], String> {
-        let params = Params::new(19 * 1024, 2, 1, Some(KEY_LEN)).map_err(|e| format!("argon2 params: {e}"))?;
+        let params = Params::new(19 * 1024, 2, 1, Some(KEY_LEN))
+            .map_err(|e| format!("argon2 params: {e}"))?;
         let argon = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
         let mut key = [0u8; KEY_LEN];
         argon
@@ -96,11 +104,13 @@ impl Vault {
     }
 
     fn decrypt(key: &[u8; KEY_LEN], envelope: &Envelope) -> Result<Vec<Entry>, String> {
-        let nonce = hex::decode(&envelope.nonce).map_err(|_| "corrupted vault nonce".to_string())?;
+        let nonce =
+            hex::decode(&envelope.nonce).map_err(|_| "corrupted vault nonce".to_string())?;
         if nonce.len() != NONCE_LEN {
             return Err("corrupted vault nonce".into());
         }
-        let ciphertext = hex::decode(&envelope.ciphertext).map_err(|_| "corrupted vault body".to_string())?;
+        let ciphertext =
+            hex::decode(&envelope.ciphertext).map_err(|_| "corrupted vault body".to_string())?;
         let cipher = XChaCha20Poly1305::new(Key::from_slice(key));
         let plaintext = cipher
             .decrypt(XNonce::from_slice(&nonce), ciphertext.as_slice())
@@ -118,7 +128,9 @@ impl Vault {
     }
 
     fn persist(&self) -> Result<(), String> {
-        let Some(key) = self.key else { return Err("vault is locked".into()) };
+        let Some(key) = self.key else {
+            return Err("vault is locked".into());
+        };
         let salt = self.salt.ok_or_else(|| "vault is locked".to_string())?;
         let path = self.path()?;
         let envelope = Vault::encrypt(&key, &salt, &self.entries)?;
@@ -172,7 +184,8 @@ impl Vault {
 
     fn listing(&self) -> String {
         if !self.is_unlocked() {
-            return "VAULT LOCKED\n\nunlock <passphrase>\n(no vault yet? `init <passphrase>`)".into();
+            return "VAULT LOCKED\n\nunlock <passphrase>\n(no vault yet? `init <passphrase>`)"
+                .into();
         }
         if self.entries.is_empty() {
             return "VAULT (unlocked, empty)\n\nadd <name> <username> <password>\nimport <csv-path>   (KeePassDX CSV export)".into();
@@ -180,9 +193,19 @@ impl Vault {
         let rows: Vec<String> = self
             .entries
             .iter()
-            .map(|e| format!("  {:<24} {}", truncate(&e.name, 24), truncate(&e.username, 32)))
+            .map(|e| {
+                format!(
+                    "  {:<24} {}",
+                    truncate(&e.name, 24),
+                    truncate(&e.username, 32)
+                )
+            })
             .collect();
-        format!("VAULT (unlocked, {} entries)\n\n{}\n\nget <name> reveals a password", self.entries.len(), rows.join("\n"))
+        format!(
+            "VAULT (unlocked, {} entries)\n\n{}\n\nget <name> reveals a password",
+            self.entries.len(),
+            rows.join("\n")
+        )
     }
 
     fn add(&mut self, name: &str, username: &str, password: &str) -> Result<String, String> {
@@ -199,10 +222,18 @@ impl Vault {
         if self.entries.len() >= MAX_ENTRIES {
             return Err(format!("vault is full ({MAX_ENTRIES} entries)"));
         }
-        if self.entries.iter().any(|e| e.name.eq_ignore_ascii_case(name)) {
+        if self
+            .entries
+            .iter()
+            .any(|e| e.name.eq_ignore_ascii_case(name))
+        {
             return Err(format!("`{name}` already exists (remove it first)"));
         }
-        self.entries.push(Entry { name: name.into(), username: username.trim().into(), password: password.into() });
+        self.entries.push(Entry {
+            name: name.into(),
+            username: username.trim().into(),
+            password: password.into(),
+        });
         self.entries.sort_by_key(|e| e.name.to_ascii_lowercase());
         self.persist()?;
         Ok(format!("saved `{name}`"))
@@ -213,11 +244,18 @@ impl Vault {
         if q.is_empty() {
             return Err("missing entry name".into());
         }
-        let hits: Vec<&Entry> = self.entries.iter().filter(|e| e.name.to_ascii_lowercase().contains(&q)).collect();
+        let hits: Vec<&Entry> = self
+            .entries
+            .iter()
+            .filter(|e| e.name.to_ascii_lowercase().contains(&q))
+            .collect();
         match hits.len() {
             0 => Err(format!("no entry matches `{needle}`")),
             1 => Ok(hits[0]),
-            _ => Err(format!("`{needle}` matches {} entries; be more specific", hits.len())),
+            _ => Err(format!(
+                "`{needle}` matches {} entries; be more specific",
+                hits.len()
+            )),
         }
     }
 
@@ -226,7 +264,10 @@ impl Vault {
             return Err("vault is locked".into());
         }
         let e = self.find(needle)?;
-        Ok(format!("{}\nuser: {}\npass: {}", e.name, e.username, e.password))
+        Ok(format!(
+            "{}\nuser: {}\npass: {}",
+            e.name, e.username, e.password
+        ))
     }
 
     fn remove(&mut self, needle: &str) -> Result<String, String> {
@@ -251,7 +292,9 @@ impl Vault {
             return Err("import: not a file".into());
         }
         if meta.len() > MAX_IMPORT_BYTES {
-            return Err(format!("import: file is larger than {MAX_IMPORT_BYTES} bytes"));
+            return Err(format!(
+                "import: file is larger than {MAX_IMPORT_BYTES} bytes"
+            ));
         }
         let text = std::fs::read_to_string(&path).map_err(|e| format!("import: {e}"))?;
         let mut added = 0usize;
@@ -267,7 +310,9 @@ impl Vault {
             }
             let (title, user, pass) = (fields[0].trim(), fields[1].trim(), &fields[2]);
             // KeePassDX CSV headers and group lines are skipped.
-            if i == 0 && (title.eq_ignore_ascii_case("title") || title.eq_ignore_ascii_case("account")) {
+            if i == 0
+                && (title.eq_ignore_ascii_case("title") || title.eq_ignore_ascii_case("account"))
+            {
                 continue;
             }
             if title.is_empty() {
@@ -283,7 +328,11 @@ impl Vault {
                 skipped += 1;
                 continue;
             }
-            self.entries.push(Entry { name, username: truncate(user, MAX_USER), password: truncate(pass, MAX_PASS) });
+            self.entries.push(Entry {
+                name,
+                username: truncate(user, MAX_USER),
+                password: truncate(pass, MAX_PASS),
+            });
             added += 1;
         }
         self.entries.sort_by_key(|e| e.name.to_ascii_lowercase());
@@ -422,7 +471,12 @@ pub fn parse_csv_line(line: &str) -> Vec<String> {
 fn write_private(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     use std::io::Write;
     use std::os::unix::fs::OpenOptionsExt;
-    let mut f = std::fs::OpenOptions::new().write(true).create(true).truncate(true).mode(0o600).open(path)?;
+    let mut f = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(path)?;
     f.write_all(bytes)
 }
 
@@ -438,7 +492,11 @@ mod tests {
 
     fn unlocked(dir: &Path) -> Vault {
         let mut v = Vault::new();
-        v.init(&ModuleContext { data_dir: dir.to_string_lossy().into(), host: Host::detached("app-vault") }).unwrap();
+        v.init(&ModuleContext {
+            data_dir: dir.to_string_lossy().into(),
+            host: Host::detached("app-vault"),
+        })
+        .unwrap();
         let r = v.handle("run", "init correct horse battery");
         assert!(r.ok, "{}", r.text);
         v
@@ -448,7 +506,11 @@ mod tests {
     fn init_unlock_roundtrip() {
         let dir = tempfile::tempdir().unwrap();
         let mut v = Vault::new();
-        v.init(&ModuleContext { data_dir: dir.path().to_string_lossy().into(), host: Host::detached("app-vault") }).unwrap();
+        v.init(&ModuleContext {
+            data_dir: dir.path().to_string_lossy().into(),
+            host: Host::detached("app-vault"),
+        })
+        .unwrap();
         assert!(v.handle("launch", "").text.contains("LOCKED"));
         let r = v.handle("run", "init correct horse battery");
         assert!(r.ok, "{}", r.text);
@@ -458,7 +520,10 @@ mod tests {
         // A fresh instance starts locked and needs the same passphrase.
         let mut second = Vault::new();
         second
-            .init(&ModuleContext { data_dir: dir.path().to_string_lossy().into(), host: Host::detached("app-vault") })
+            .init(&ModuleContext {
+                data_dir: dir.path().to_string_lossy().into(),
+                host: Host::detached("app-vault"),
+            })
             .unwrap();
         assert!(!second.handle("run", "unlock wrong password").ok);
         assert!(second.handle("run", "unlock correct horse battery").ok);
@@ -504,7 +569,10 @@ mod tests {
 
         let mut second = Vault::new();
         second
-            .init(&ModuleContext { data_dir: dir.path().to_string_lossy().into(), host: Host::detached("app-vault") })
+            .init(&ModuleContext {
+                data_dir: dir.path().to_string_lossy().into(),
+                host: Host::detached("app-vault"),
+            })
             .unwrap();
         assert!(!second.handle("run", "unlock correct horse battery").ok);
     }
@@ -540,7 +608,11 @@ mod tests {
     fn short_passphrases_and_missing_command_errors() {
         let dir = tempfile::tempdir().unwrap();
         let mut v = Vault::new();
-        v.init(&ModuleContext { data_dir: dir.path().to_string_lossy().into(), host: Host::detached("app-vault") }).unwrap();
+        v.init(&ModuleContext {
+            data_dir: dir.path().to_string_lossy().into(),
+            host: Host::detached("app-vault"),
+        })
+        .unwrap();
         assert!(!v.handle("run", "init short").ok);
         assert!(!v.handle("run", "unlock whatever").ok);
         assert!(!v.handle("run", "nonsense").ok);
@@ -554,11 +626,17 @@ mod tests {
         v.handle("run", "add secret me hunter2");
         let file = dir.path().join("vault.bin");
         let text = std::fs::read_to_string(&file).unwrap();
-        assert!(!text.contains("hunter2"), "password must not be stored in the clear");
+        assert!(
+            !text.contains("hunter2"),
+            "password must not be stored in the clear"
+        );
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            assert_eq!(std::fs::metadata(&file).unwrap().permissions().mode() & 0o777, 0o600);
+            assert_eq!(
+                std::fs::metadata(&file).unwrap().permissions().mode() & 0o777,
+                0o600
+            );
         }
     }
 

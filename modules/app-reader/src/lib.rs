@@ -29,11 +29,16 @@ pub struct Reader {
 
 impl Reader {
     pub fn new() -> Self {
-        Self { docs: None, current: None }
+        Self {
+            docs: None,
+            current: None,
+        }
     }
 
     fn docs_dir(&self) -> Result<PathBuf, String> {
-        self.docs.clone().ok_or_else(|| "reader storage not initialised".to_string())
+        self.docs
+            .clone()
+            .ok_or_else(|| "reader storage not initialised".to_string())
     }
 
     /// Resolve a relative name inside the document directory, refusing
@@ -47,7 +52,9 @@ impl Reader {
             return Ok(PathBuf::from(arg));
         }
         if let Some(rest) = arg.strip_prefix("~/") {
-            let home = std::env::var_os("HOME").map(PathBuf::from).ok_or_else(|| "no HOME set".to_string())?;
+            let home = std::env::var_os("HOME")
+                .map(PathBuf::from)
+                .ok_or_else(|| "no HOME set".to_string())?;
             return Ok(home.join(rest));
         }
         if arg.starts_with('~') {
@@ -59,7 +66,10 @@ impl Reader {
                 continue;
             }
             if part == ".." {
-                return Err("relative paths may not leave the document directory (use an absolute path)".into());
+                return Err(
+                    "relative paths may not leave the document directory (use an absolute path)"
+                        .into(),
+                );
             }
             out.push(part);
         }
@@ -67,9 +77,14 @@ impl Reader {
     }
 
     fn read_lines(path: &Path) -> Result<Vec<String>, String> {
-        let ext = path.extension().map(|e| e.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
+        let ext = path
+            .extension()
+            .map(|e| e.to_string_lossy().to_ascii_lowercase())
+            .unwrap_or_default();
         if ext == "pdf" {
-            return Err("PDF is not decoded by this reader — export the document to .txt/.md first".into());
+            return Err(
+                "PDF is not decoded by this reader — export the document to .txt/.md first".into(),
+            );
         }
         if ext == "epub" {
             return Err("EPUB is not decoded by this reader — export to .txt/.md first".into());
@@ -100,10 +115,17 @@ impl Reader {
     }
 
     fn page(&self, delta: isize) -> Result<String, String> {
-        let (path, offset) = self.current.as_ref().ok_or_else(|| "nothing is open (try `open <name>`)".to_string())?;
+        let (path, offset) = self
+            .current
+            .as_ref()
+            .ok_or_else(|| "nothing is open (try `open <name>`)".to_string())?;
         let lines = Self::read_lines(path)?;
         let max = lines.len().saturating_sub(1);
-        let next = if delta > 0 { offset.saturating_add(PAGE_LINES) } else { offset.saturating_sub(PAGE_LINES) };
+        let next = if delta > 0 {
+            offset.saturating_add(PAGE_LINES)
+        } else {
+            offset.saturating_sub(PAGE_LINES)
+        };
         let next = next.min(max);
         Ok(render_page(path, &lines, next))
     }
@@ -114,13 +136,21 @@ impl Reader {
             Err(e) => return format!("READER\n\n{e}"),
         };
         let mut names: Vec<String> = std::fs::read_dir(&dir)
-            .map(|rd| rd.flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect())
+            .map(|rd| {
+                rd.flatten()
+                    .map(|e| e.file_name().to_string_lossy().into_owned())
+                    .collect()
+            })
             .unwrap_or_default();
         names.sort();
         let body = if names.is_empty() {
             "  (no documents yet)\n  put .txt/.md files in the module's document directory,\n  or open any file by absolute path".to_string()
         } else {
-            names.iter().map(|n| format!("  {n}")).collect::<Vec<_>>().join("\n")
+            names
+                .iter()
+                .map(|n| format!("  {n}"))
+                .collect::<Vec<_>>()
+                .join("\n")
         };
         format!("READER\n\n{body}\n\nopen <name>   page through a document\nnext / prev   move one page")
     }
@@ -141,7 +171,11 @@ impl Reader {
             .unwrap_or_default();
         match hits.len() {
             0 => Err(format!("no document matching `{needle}`")),
-            _ => Ok(hits.iter().map(|n| format!("  {n}")).collect::<Vec<_>>().join("\n")),
+            _ => Ok(hits
+                .iter()
+                .map(|n| format!("  {n}"))
+                .collect::<Vec<_>>()
+                .join("\n")),
         }
     }
 
@@ -248,8 +282,11 @@ mod tests {
     fn ready() -> (tempfile::TempDir, Reader) {
         let dir = tempfile::tempdir().unwrap();
         let mut r = Reader::new();
-        r.init(&ModuleContext { data_dir: dir.path().to_string_lossy().into(), host: Host::detached("app-reader") })
-            .unwrap();
+        r.init(&ModuleContext {
+            data_dir: dir.path().to_string_lossy().into(),
+            host: Host::detached("app-reader"),
+        })
+        .unwrap();
         (dir, r)
     }
 
@@ -273,7 +310,10 @@ mod tests {
         let list = ok(&mut r, "list");
         assert!(list.contains("guide.md"), "{list}");
         let page = ok(&mut r, "open guide.md");
-        assert!(page.contains("# Guide") && page.contains("line three"), "{page}");
+        assert!(
+            page.contains("# Guide") && page.contains("line three"),
+            "{page}"
+        );
         assert!(page.contains("of 3"));
     }
 
@@ -283,7 +323,10 @@ mod tests {
         let body: String = (0..120).map(|i| format!("line {i}\n")).collect();
         doc(&r, "long.txt", &body);
         let first = ok(&mut r, "open long.txt");
-        assert!(first.contains("lines 1-60 of 120") && first.contains("`next`"), "{first}");
+        assert!(
+            first.contains("lines 1-60 of 120") && first.contains("`next`"),
+            "{first}"
+        );
         let second = ok(&mut r, "next");
         assert!(second.contains("lines 61-120 of 120"), "{second}");
         assert!(!second.contains("`next`"));
@@ -294,21 +337,34 @@ mod tests {
     #[test]
     fn traversal_is_refused_but_absolute_paths_work() {
         let (_d, mut r) = ready();
-        assert!(!r.execute("open ../secret.txt").ok, "relative traversal refused");
-        assert!(!r.execute("open a/../../b.txt").ok, "nested traversal refused");
+        assert!(
+            !r.execute("open ../secret.txt").ok,
+            "relative traversal refused"
+        );
+        assert!(
+            !r.execute("open a/../../b.txt").ok,
+            "nested traversal refused"
+        );
 
         let outside = tempfile::tempdir().unwrap();
         let target = outside.path().join("notes.txt");
         std::fs::write(&target, "outside content").unwrap();
         let page = ok(&mut r, &format!("open {}", target.display()));
-        assert!(page.contains("outside content"), "explicit absolute path is allowed: {page}");
+        assert!(
+            page.contains("outside content"),
+            "explicit absolute path is allowed: {page}"
+        );
     }
 
     #[test]
     fn paging_without_an_open_document_errors() {
         let (_d, mut r) = ready();
         let out = r.execute("next");
-        assert!(!out.ok && out.text.contains("nothing is open"), "{}", out.text);
+        assert!(
+            !out.ok && out.text.contains("nothing is open"),
+            "{}",
+            out.text
+        );
     }
 
     #[test]
@@ -327,7 +383,10 @@ mod tests {
         assert!(!r.execute("open big.txt").ok);
         let p = r.docs_dir().unwrap().join("binary.txt");
         std::fs::write(&p, [0xff, 0xd8, 0xff, 0x00, 0x9c]).unwrap();
-        assert!(!r.execute("open binary.txt").ok, "non-UTF-8 is reported, not crashed");
+        assert!(
+            !r.execute("open binary.txt").ok,
+            "non-UTF-8 is reported, not crashed"
+        );
     }
 
     #[test]

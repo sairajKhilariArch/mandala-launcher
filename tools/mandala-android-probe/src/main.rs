@@ -28,10 +28,16 @@ use mandala_core::MandalaError;
 use std::sync::Arc;
 
 fn main() {
-    let root = std::env::var_os("MANDALA_HOME").map(std::path::PathBuf::from).unwrap_or_else(|| std::path::PathBuf::from("./mandala-home"));
+    let root = std::env::var_os("MANDALA_HOME")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::path::PathBuf::from("./mandala-home"));
     println!("mandala-android-probe");
     println!("  home   {}", root.display());
-    println!("  target {} / {}", std::env::consts::ARCH, std::env::consts::OS);
+    println!(
+        "  target {} / {}",
+        std::env::consts::ARCH,
+        std::env::consts::OS
+    );
 
     let paths = HostPaths::new(root);
     if let Err(e) = paths.ensure() {
@@ -47,7 +53,10 @@ fn main() {
     };
     println!("  trusted keys {}", trust.len());
     if trust.is_empty() {
-        eprintln!("FAIL no trusted keys in {}: every module would be rejected", paths.trust_dir().display());
+        eprintln!(
+            "FAIL no trusted keys in {}: every module would be rejected",
+            paths.trust_dir().display()
+        );
         std::process::exit(1);
     }
 

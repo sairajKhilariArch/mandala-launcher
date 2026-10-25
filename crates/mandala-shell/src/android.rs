@@ -32,7 +32,9 @@ fn with_activity<T>(
     let ctx = ndk_context::android_context();
     // SAFETY: android-activity installs this VM/context pair before `main`.
     let vm = unsafe { JavaVM::from_raw(ctx.vm().cast()) }.map_err(|e| format!("jni: {e}"))?;
-    let mut env = vm.attach_current_thread().map_err(|e| format!("jni: {e}"))?;
+    let mut env = vm
+        .attach_current_thread()
+        .map_err(|e| format!("jni: {e}"))?;
     // SAFETY: the context is the Activity reference published by ndk-context.
     let activity = unsafe { JObject::from_raw(ctx.context().cast()) };
     let out = f(&mut env, &activity)?;
@@ -51,19 +53,32 @@ fn check_exception(env: &mut JNIEnv<'_>) -> Result<(), String> {
 
 /// Replace the system wallpaper with a local image file.
 pub fn set_wallpaper(path: &Path) -> Result<(), String> {
-    let path = path.to_str().ok_or("wallpaper path is not valid UTF-8")?.to_string();
+    let path = path
+        .to_str()
+        .ok_or("wallpaper path is not valid UTF-8")?
+        .to_string();
     if path.is_empty() {
         return Err("wallpaper path is empty".into());
     }
     with_activity(move |env, activity| {
         let jpath = env.new_string(&path).map_err(|e| format!("jni: {e}"))?;
         let file = env
-            .new_object("java/io/File", "(Ljava/lang/String;)V", &[JValue::Object(&jpath)])
+            .new_object(
+                "java/io/File",
+                "(Ljava/lang/String;)V",
+                &[JValue::Object(&jpath)],
+            )
             .map_err(|e| format!("jni: {e}"))?;
         let stream = env
-            .new_object("java/io/FileInputStream", "(Ljava/io/File;)V", &[JValue::Object(&file)])
+            .new_object(
+                "java/io/FileInputStream",
+                "(Ljava/io/File;)V",
+                &[JValue::Object(&file)],
+            )
             .map_err(|e| format!("wallpaper: {e}"))?;
-        let manager_class = env.find_class("android/app/WallpaperManager").map_err(|e| format!("jni: {e}"))?;
+        let manager_class = env
+            .find_class("android/app/WallpaperManager")
+            .map_err(|e| format!("jni: {e}"))?;
         let manager = env
             .call_static_method(
                 manager_class,
@@ -74,8 +89,13 @@ pub fn set_wallpaper(path: &Path) -> Result<(), String> {
             .map_err(|e| format!("wallpaper: {e}"))?
             .l()
             .map_err(|e| format!("wallpaper: {e}"))?;
-        env.call_method(manager, "setStream", "(Ljava/io/InputStream;)V", &[JValue::Object(&stream)])
-            .map_err(|e| format!("wallpaper: {e}"))?;
+        env.call_method(
+            manager,
+            "setStream",
+            "(Ljava/io/InputStream;)V",
+            &[JValue::Object(&stream)],
+        )
+        .map_err(|e| format!("wallpaper: {e}"))?;
         Ok(())
     })
 }
@@ -89,18 +109,33 @@ pub fn set_wallpaper(path: &Path) -> Result<(), String> {
 /// Android allows only below API 24 — the error surfaces verbatim if the
 /// provider is missing on a modern device, instead of a silent no-op).
 pub fn capture(target: &Path) -> Result<(), String> {
-    let path = target.to_str().ok_or("capture path is not valid UTF-8")?.to_string();
+    let path = target
+        .to_str()
+        .ok_or("capture path is not valid UTF-8")?
+        .to_string();
     with_activity(move |env, activity| {
         let jpath = env.new_string(&path).map_err(|e| format!("jni: {e}"))?;
         let file = env
-            .new_object("java/io/File", "(Ljava/lang/String;)V", &[JValue::Object(&jpath)])
+            .new_object(
+                "java/io/File",
+                "(Ljava/lang/String;)V",
+                &[JValue::Object(&jpath)],
+            )
             .map_err(|e| format!("camera: {e}"))?;
         let uri = capture_uri(env, activity, &file)?;
-        let action = env.new_string(CAPTURE_ACTION).map_err(|e| format!("jni: {e}"))?;
+        let action = env
+            .new_string(CAPTURE_ACTION)
+            .map_err(|e| format!("jni: {e}"))?;
         let intent = env
-            .new_object("android/content/Intent", "(Ljava/lang/String;)V", &[JValue::Object(&action)])
+            .new_object(
+                "android/content/Intent",
+                "(Ljava/lang/String;)V",
+                &[JValue::Object(&action)],
+            )
             .map_err(|e| format!("camera: {e}"))?;
-        let key = env.new_string(EXTRA_OUTPUT).map_err(|e| format!("jni: {e}"))?;
+        let key = env
+            .new_string(EXTRA_OUTPUT)
+            .map_err(|e| format!("jni: {e}"))?;
         env.call_method(
             &intent,
             "putExtra",
@@ -108,10 +143,20 @@ pub fn capture(target: &Path) -> Result<(), String> {
             &[JValue::Object(&key), JValue::Object(&uri)],
         )
         .map_err(|e| format!("camera: {e}"))?;
-        env.call_method(&intent, "addFlags", "(I)Landroid/content/Intent;", &[JValue::Int(FLAG_GRANT_READ_WRITE)])
-            .map_err(|e| format!("camera: {e}"))?;
-        env.call_method(activity, "startActivity", "(Landroid/content/Intent;)V", &[JValue::Object(&intent)])
-            .map_err(|e| format!("camera: {e}"))?;
+        env.call_method(
+            &intent,
+            "addFlags",
+            "(I)Landroid/content/Intent;",
+            &[JValue::Int(FLAG_GRANT_READ_WRITE)],
+        )
+        .map_err(|e| format!("camera: {e}"))?;
+        env.call_method(
+            activity,
+            "startActivity",
+            "(Landroid/content/Intent;)V",
+            &[JValue::Object(&intent)],
+        )
+        .map_err(|e| format!("camera: {e}"))?;
         Ok(())
     })
 }
@@ -129,13 +174,22 @@ fn capture_uri<'local>(
             .l()
             .map_err(|e| format!("camera: {e}"))?;
         let package = JString::from(package);
-        let package: String = env.get_string(&package).map_err(|e| format!("camera: {e}"))?.into();
-        let authority = env.new_string(format!("{package}.fileprovider")).map_err(|e| format!("jni: {e}"))?;
+        let package: String = env
+            .get_string(&package)
+            .map_err(|e| format!("camera: {e}"))?
+            .into();
+        let authority = env
+            .new_string(format!("{package}.fileprovider"))
+            .map_err(|e| format!("jni: {e}"))?;
         let uri = env.call_static_method(
             class,
             "getUriForFile",
             "(Landroid/content/Context;Ljava/lang/String;Ljava/io/File;)Landroid/net/Uri;",
-            &[JValue::Object(activity), JValue::Object(&authority), JValue::Object(file)],
+            &[
+                JValue::Object(activity),
+                JValue::Object(&authority),
+                JValue::Object(file),
+            ],
         );
         match uri.and_then(|v| v.l()) {
             Ok(uri) => return Ok(uri),
@@ -148,7 +202,9 @@ fn capture_uri<'local>(
         // No AndroidX on the classpath — clear the pending class-not-found.
         let _ = env.exception_clear();
     }
-    let uri_class = env.find_class("android/net/Uri").map_err(|e| format!("jni: {e}"))?;
+    let uri_class = env
+        .find_class("android/net/Uri")
+        .map_err(|e| format!("jni: {e}"))?;
     env.call_static_method(uri_class, "fromFile", "(Ljava/io/File;)Landroid/net/Uri;", &[JValue::Object(file)])
         .map_err(|e| format!("camera: {e} (no FileProvider declared in the manifest; add android/res/xml/file_paths.xml)"))?
         .l()
@@ -158,7 +214,9 @@ fn capture_uri<'local>(
 /// True when the app may draw over other apps.
 pub fn overlay_granted() -> Result<bool, String> {
     with_activity(|env, activity| {
-        let settings = env.find_class("android/provider/Settings").map_err(|e| format!("jni: {e}"))?;
+        let settings = env
+            .find_class("android/provider/Settings")
+            .map_err(|e| format!("jni: {e}"))?;
         let granted = env
             .call_static_method(
                 settings,
@@ -186,15 +244,29 @@ pub fn request_overlay_permission() -> Result<bool, String> {
             .l()
             .map_err(|e| format!("overlay: {e}"))?;
         let package = JString::from(package);
-        let package: String = env.get_string(&package).map_err(|e| format!("overlay: {e}"))?.into();
-        let uri_text = env.new_string(format!("package:{package}")).map_err(|e| format!("jni: {e}"))?;
-        let uri_class = env.find_class("android/net/Uri").map_err(|e| format!("jni: {e}"))?;
+        let package: String = env
+            .get_string(&package)
+            .map_err(|e| format!("overlay: {e}"))?
+            .into();
+        let uri_text = env
+            .new_string(format!("package:{package}"))
+            .map_err(|e| format!("jni: {e}"))?;
+        let uri_class = env
+            .find_class("android/net/Uri")
+            .map_err(|e| format!("jni: {e}"))?;
         let uri = env
-            .call_static_method(uri_class, "parse", "(Ljava/lang/String;)Landroid/net/Uri;", &[JValue::Object(&uri_text)])
+            .call_static_method(
+                uri_class,
+                "parse",
+                "(Ljava/lang/String;)Landroid/net/Uri;",
+                &[JValue::Object(&uri_text)],
+            )
             .map_err(|e| format!("overlay: {e}"))?
             .l()
             .map_err(|e| format!("overlay: {e}"))?;
-        let action = env.new_string(OVERLAY_ACTION).map_err(|e| format!("jni: {e}"))?;
+        let action = env
+            .new_string(OVERLAY_ACTION)
+            .map_err(|e| format!("jni: {e}"))?;
         let intent = env
             .new_object(
                 "android/content/Intent",
@@ -202,8 +274,13 @@ pub fn request_overlay_permission() -> Result<bool, String> {
                 &[JValue::Object(&action), JValue::Object(&uri)],
             )
             .map_err(|e| format!("overlay: {e}"))?;
-        env.call_method(activity, "startActivity", "(Landroid/content/Intent;)V", &[JValue::Object(&intent)])
-            .map_err(|e| format!("overlay: {e}"))?;
+        env.call_method(
+            activity,
+            "startActivity",
+            "(Landroid/content/Intent;)V",
+            &[JValue::Object(&intent)],
+        )
+        .map_err(|e| format!("overlay: {e}"))?;
         Ok(false)
     })
 }

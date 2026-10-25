@@ -47,7 +47,8 @@ mod tests {
 
     #[test]
     fn parses_vm_rss_lines() {
-        let sample = "Name:\tmandala-shell\nVmPeak:\t  123456 kB\nVmRSS:\t   4321 kB\nVmHWM:\t   5000 kB\n";
+        let sample =
+            "Name:\tmandala-shell\nVmPeak:\t  123456 kB\nVmRSS:\t   4321 kB\nVmHWM:\t   5000 kB\n";
         assert_eq!(parse_vm_rss(sample), Some(4321));
         assert_eq!(parse_vm_rss("nothing here"), None);
         assert_eq!(parse_vm_rss("VmRSS: not-a-number kB"), None);

@@ -44,7 +44,11 @@ pub struct Gallery {
 
 impl Gallery {
     pub fn new() -> Self {
-        Self { root: PathBuf::new(), current: PathBuf::new(), truncated: false }
+        Self {
+            root: PathBuf::new(),
+            current: PathBuf::new(),
+            truncated: false,
+        }
     }
 
     fn config_file(&self) -> PathBuf {
@@ -52,7 +56,9 @@ impl Gallery {
     }
 
     fn load_config(file: &Path) -> Option<Config> {
-        std::fs::read_to_string(file).ok().and_then(|t| serde_json::from_str(&t).ok())
+        std::fs::read_to_string(file)
+            .ok()
+            .and_then(|t| serde_json::from_str(&t).ok())
     }
 
     /// `set <dir>`: absolute, existing directory.
@@ -63,14 +69,18 @@ impl Gallery {
         }
         let path = PathBuf::from(dir);
         if !path.is_absolute() {
-            return Err("use an absolute path, e.g. set ~/Pictures (expanded by your shell)".into());
+            return Err(
+                "use an absolute path, e.g. set ~/Pictures (expanded by your shell)".into(),
+            );
         }
         let meta = std::fs::metadata(&path).map_err(|e| format!("set: {e}"))?;
         if !meta.is_dir() {
             return Err(format!("set: {path:?} is not a directory"));
         }
         self.current = path.clone();
-        let cfg = Config { root: path.to_string_lossy().into_owned() };
+        let cfg = Config {
+            root: path.to_string_lossy().into_owned(),
+        };
         let json = serde_json::to_string_pretty(&cfg).map_err(|e| e.to_string())?;
         write_private(&self.config_file(), json.as_bytes()).map_err(|e| format!("set: {e}"))?;
         Ok(format!("scanning {}", path.display()))
@@ -79,7 +89,9 @@ impl Gallery {
     fn scan(&mut self, fragment: &str) -> Vec<Entry> {
         let needle = fragment.trim().to_ascii_lowercase();
         let mut entries: Vec<Entry> = Vec::new();
-        let Ok(rd) = std::fs::read_dir(&self.current) else { return entries };
+        let Ok(rd) = std::fs::read_dir(&self.current) else {
+            return entries;
+        };
         let mut paths: Vec<PathBuf> = rd.flatten().map(|e| e.path()).collect();
         paths.sort();
         self.truncated = false;
@@ -92,7 +104,10 @@ impl Gallery {
                 Some(n) => n,
                 None => continue,
             };
-            let ext = path.extension().map(|e| e.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
+            let ext = path
+                .extension()
+                .map(|e| e.to_string_lossy().to_ascii_lowercase())
+                .unwrap_or_default();
             let kind = classify(&ext);
             if kind.is_none() {
                 continue;
@@ -105,8 +120,17 @@ impl Gallery {
                 break;
             }
             let bytes = meta.len();
-            let dims = if kind == Some("image") { probe_dimensions(&path) } else { None };
-            entries.push(Entry { name, kind: kind.unwrap_or("file"), bytes, dims });
+            let dims = if kind == Some("image") {
+                probe_dimensions(&path)
+            } else {
+                None
+            };
+            entries.push(Entry {
+                name,
+                kind: kind.unwrap_or("file"),
+                bytes,
+                dims,
+            });
         }
         entries
     }
@@ -134,7 +158,13 @@ impl Gallery {
                 Some((w, h)) => format!("{w}x{h}"),
                 None => "—".into(),
             };
-            out.push_str(&format!("{:<9} {:>10}  {:>10}  {}\n", e.kind, human(e.bytes), dims, e.name));
+            out.push_str(&format!(
+                "{:<9} {:>10}  {:>10}  {}\n",
+                e.kind,
+                human(e.bytes),
+                dims,
+                e.name
+            ));
         }
         out.push_str(&format!("\n{} file(s)", entries.len()));
         if self.truncated {
@@ -162,7 +192,10 @@ impl Gallery {
             }
             _ => {
                 let list: Vec<String> = hits.iter().map(|e| format!("  {}", e.name)).collect();
-                Err(format!("`{name}` matches several files:\n{}", list.join("\n")))
+                Err(format!(
+                    "`{name}` matches several files:\n{}",
+                    list.join("\n")
+                ))
             }
         }
     }
@@ -241,7 +274,10 @@ pub fn probe_dimensions(path: &Path) -> Option<(u32, u32)> {
     use std::io::Read;
     let n = f.read(&mut buf).ok()?;
     let b = &buf[..n];
-    png_dims(b).or_else(|| jpeg_dims(b, path)).or_else(|| gif_dims(b)).or_else(|| bmp_dims(b))
+    png_dims(b)
+        .or_else(|| jpeg_dims(b, path))
+        .or_else(|| gif_dims(b))
+        .or_else(|| bmp_dims(b))
 }
 
 fn png_dims(b: &[u8]) -> Option<(u32, u32)> {
@@ -284,7 +320,21 @@ fn jpeg_dims(head: &[u8], path: &Path) -> Option<(u32, u32)> {
             continue;
         }
         let len = u16::from_be_bytes([bytes[i + 2], bytes[i + 3]]) as usize;
-        let is_sof = matches!(marker, 0xc0 | 0xc1 | 0xc2 | 0xc3 | 0xc5 | 0xc6 | 0xc7 | 0xc9 | 0xca | 0xcb | 0xcd | 0xce | 0xcf);
+        let is_sof = matches!(
+            marker,
+            0xc0 | 0xc1
+                | 0xc2
+                | 0xc3
+                | 0xc5
+                | 0xc6
+                | 0xc7
+                | 0xc9
+                | 0xca
+                | 0xcb
+                | 0xcd
+                | 0xce
+                | 0xcf
+        );
         if is_sof && i + 9 <= bytes.len() {
             let h = u16::from_be_bytes([bytes[i + 5], bytes[i + 6]]) as u32;
             let w = u16::from_be_bytes([bytes[i + 7], bytes[i + 8]]) as u32;
@@ -331,7 +381,12 @@ fn split_head(s: &str) -> (&str, &str) {
 fn write_private(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     use std::io::Write;
     use std::os::unix::fs::OpenOptionsExt;
-    let mut f = std::fs::OpenOptions::new().write(true).create(true).truncate(true).mode(0o600).open(path)?;
+    let mut f = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(path)?;
     f.write_all(bytes)
 }
 
@@ -381,8 +436,11 @@ mod tests {
     fn ready() -> (tempfile::TempDir, Gallery) {
         let dir = tempfile::tempdir().unwrap();
         let mut g = Gallery::new();
-        g.init(&ModuleContext { data_dir: dir.path().to_string_lossy().into(), host: Host::detached("app-gallery") })
-            .unwrap();
+        g.init(&ModuleContext {
+            data_dir: dir.path().to_string_lossy().into(),
+            host: Host::detached("app-gallery"),
+        })
+        .unwrap();
         (dir, g)
     }
 
@@ -445,17 +503,26 @@ mod tests {
         let list = ok(&mut g, &format!("set {}", media.display()));
         assert!(list.contains("scanning"), "{list}");
         let list = ok(&mut g, "list");
-        assert!(list.contains("one.png") && list.contains("two.mp4"), "{list}");
+        assert!(
+            list.contains("one.png") && list.contains("two.mp4"),
+            "{list}"
+        );
         assert!(!list.contains("notes.txt"), "non-media filtered out");
         assert!(list.contains("64x64"), "{list}");
         assert!(list.contains("2.0 KiB"), "{list}");
         assert!(list.contains("2 file(s)"));
 
         let filtered = ok(&mut g, "list one");
-        assert!(filtered.contains("one.png") && !filtered.contains("two.mp4"), "{filtered}");
+        assert!(
+            filtered.contains("one.png") && !filtered.contains("two.mp4"),
+            "{filtered}"
+        );
 
         let info = ok(&mut g, "info one.png");
-        assert!(info.contains("image") && info.contains("64 x 64 px"), "{info}");
+        assert!(
+            info.contains("image") && info.contains("64 x 64 px"),
+            "{info}"
+        );
     }
 
     #[test]
@@ -465,7 +532,10 @@ mod tests {
         assert!(!g.execute("set /definitely/not/here").ok, "must exist");
         let file = dir.path().join("a-file");
         std::fs::write(&file, b"x").unwrap();
-        assert!(!g.execute(&format!("set {}", file.display())).ok, "must be a directory");
+        assert!(
+            !g.execute(&format!("set {}", file.display())).ok,
+            "must be a directory"
+        );
         assert!(!g.execute("set").ok);
         assert!(g.execute("root").ok);
     }
@@ -477,7 +547,10 @@ mod tests {
         ok(&mut g, &format!("set {}", media.path().display()));
         let mut second = Gallery::new();
         second
-            .init(&ModuleContext { data_dir: dir.path().to_string_lossy().into(), host: Host::detached("app-gallery") })
+            .init(&ModuleContext {
+                data_dir: dir.path().to_string_lossy().into(),
+                host: Host::detached("app-gallery"),
+            })
             .unwrap();
         assert_eq!(second.current, media.path());
     }

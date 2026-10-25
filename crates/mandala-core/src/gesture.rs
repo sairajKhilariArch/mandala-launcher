@@ -72,7 +72,11 @@ pub struct GestureTracker {
 
 impl GestureTracker {
     pub fn new(cfg: GestureConfig) -> Self {
-        Self { cfg, press: None, last_swipe_up_ms: None }
+        Self {
+            cfg,
+            press: None,
+            last_swipe_up_ms: None,
+        }
     }
 
     pub fn config(&self) -> &GestureConfig {
@@ -80,12 +84,18 @@ impl GestureTracker {
     }
 
     pub fn pointer_down(&mut self, x: f32, y: f32, now_ms: u64) {
-        self.press = Some(Press { x, y, at_ms: now_ms });
+        self.press = Some(Press {
+            x,
+            y,
+            at_ms: now_ms,
+        });
     }
 
     /// Classify the gesture that just ended. `w`/`h` are the window size.
     pub fn pointer_up(&mut self, x: f32, y: f32, w: f32, h: f32, now_ms: u64) -> Gesture {
-        let Some(p) = self.press.take() else { return Gesture::None };
+        let Some(p) = self.press.take() else {
+            return Gesture::None;
+        };
         let c = self.cfg;
         let (dx, dy) = (x - p.x, y - p.y);
         let dist = (dx * dx + dy * dy).sqrt();
@@ -111,9 +121,17 @@ impl GestureTracker {
                 if !in_lower_zone {
                     return Gesture::SystemBackPassthrough;
                 }
-                return if from_left { Gesture::OpenPanelB } else { Gesture::OpenPanelC };
+                return if from_left {
+                    Gesture::OpenPanelB
+                } else {
+                    Gesture::OpenPanelC
+                };
             }
-            return if dx < 0.0 { Gesture::SwipeLeft } else { Gesture::SwipeRight };
+            return if dx < 0.0 {
+                Gesture::SwipeLeft
+            } else {
+                Gesture::SwipeRight
+            };
         }
 
         if upward && in_bottom_anchor {
@@ -140,7 +158,13 @@ mod tests {
     const W: f32 = 412.0;
     const H: f32 = 915.0;
 
-    fn swipe(t: &mut GestureTracker, from: (f32, f32), to: (f32, f32), t0: u64, t1: u64) -> Gesture {
+    fn swipe(
+        t: &mut GestureTracker,
+        from: (f32, f32),
+        to: (f32, f32),
+        t0: u64,
+        t1: u64,
+    ) -> Gesture {
         t.pointer_down(from.0, from.1, t0);
         t.pointer_up(to.0, to.1, W, H, t1)
     }
@@ -151,69 +175,138 @@ mod tests {
 
     #[test]
     fn lower_left_edge_opens_panel_b() {
-        assert_eq!(swipe(&mut tracker(), (4.0, 800.0), (200.0, 805.0), 0, 120), Gesture::OpenPanelB);
+        assert_eq!(
+            swipe(&mut tracker(), (4.0, 800.0), (200.0, 805.0), 0, 120),
+            Gesture::OpenPanelB
+        );
     }
 
     #[test]
     fn lower_right_edge_opens_panel_c() {
-        assert_eq!(swipe(&mut tracker(), (W - 4.0, 700.0), (W - 220.0, 702.0), 0, 120), Gesture::OpenPanelC);
+        assert_eq!(
+            swipe(&mut tracker(), (W - 4.0, 700.0), (W - 220.0, 702.0), 0, 120),
+            Gesture::OpenPanelC
+        );
     }
 
     #[test]
     fn upper_edge_swipes_pass_through_to_os() {
-        assert_eq!(swipe(&mut tracker(), (4.0, 300.0), (200.0, 300.0), 0, 120), Gesture::SystemBackPassthrough);
-        assert_eq!(swipe(&mut tracker(), (W - 4.0, 100.0), (60.0, 100.0), 0, 120), Gesture::SystemBackPassthrough);
+        assert_eq!(
+            swipe(&mut tracker(), (4.0, 300.0), (200.0, 300.0), 0, 120),
+            Gesture::SystemBackPassthrough
+        );
+        assert_eq!(
+            swipe(&mut tracker(), (W - 4.0, 100.0), (60.0, 100.0), 0, 120),
+            Gesture::SystemBackPassthrough
+        );
     }
 
     #[test]
     fn threshold_boundary_is_70_percent() {
         let y_just_above = H * 0.70 - 1.0;
         let y_just_below = H * 0.70 + 1.0;
-        assert_eq!(swipe(&mut tracker(), (3.0, y_just_above), (150.0, y_just_above), 0, 100), Gesture::SystemBackPassthrough);
-        assert_eq!(swipe(&mut tracker(), (3.0, y_just_below), (150.0, y_just_below), 0, 100), Gesture::OpenPanelB);
+        assert_eq!(
+            swipe(
+                &mut tracker(),
+                (3.0, y_just_above),
+                (150.0, y_just_above),
+                0,
+                100
+            ),
+            Gesture::SystemBackPassthrough
+        );
+        assert_eq!(
+            swipe(
+                &mut tracker(),
+                (3.0, y_just_below),
+                (150.0, y_just_below),
+                0,
+                100
+            ),
+            Gesture::OpenPanelB
+        );
     }
 
     #[test]
     fn outward_swipes_close_drawers() {
-        assert_eq!(swipe(&mut tracker(), (200.0, 500.0), (40.0, 500.0), 0, 100), Gesture::SwipeLeft);
-        assert_eq!(swipe(&mut tracker(), (150.0, 500.0), (350.0, 505.0), 0, 100), Gesture::SwipeRight);
+        assert_eq!(
+            swipe(&mut tracker(), (200.0, 500.0), (40.0, 500.0), 0, 100),
+            Gesture::SwipeLeft
+        );
+        assert_eq!(
+            swipe(&mut tracker(), (150.0, 500.0), (350.0, 505.0), 0, 100),
+            Gesture::SwipeRight
+        );
     }
 
     #[test]
     fn swipe_up_from_anchor() {
-        assert_eq!(swipe(&mut tracker(), (200.0, H - 10.0), (205.0, H - 200.0), 0, 150), Gesture::SwipeUp);
+        assert_eq!(
+            swipe(
+                &mut tracker(),
+                (200.0, H - 10.0),
+                (205.0, H - 200.0),
+                0,
+                150
+            ),
+            Gesture::SwipeUp
+        );
     }
 
     #[test]
     fn swipe_up_outside_anchor_is_ignored() {
-        assert_eq!(swipe(&mut tracker(), (200.0, 400.0), (200.0, 100.0), 0, 150), Gesture::None);
+        assert_eq!(
+            swipe(&mut tracker(), (200.0, 400.0), (200.0, 100.0), 0, 150),
+            Gesture::None
+        );
     }
 
     #[test]
     fn double_swipe_up_within_window() {
         let mut t = tracker();
-        assert_eq!(swipe(&mut t, (200.0, H - 10.0), (200.0, H - 200.0), 0, 100), Gesture::SwipeUp);
-        assert_eq!(swipe(&mut t, (200.0, H - 10.0), (200.0, H - 200.0), 300, 400), Gesture::DoubleSwipeUp);
+        assert_eq!(
+            swipe(&mut t, (200.0, H - 10.0), (200.0, H - 200.0), 0, 100),
+            Gesture::SwipeUp
+        );
+        assert_eq!(
+            swipe(&mut t, (200.0, H - 10.0), (200.0, H - 200.0), 300, 400),
+            Gesture::DoubleSwipeUp
+        );
         // counter resets afterwards
-        assert_eq!(swipe(&mut t, (200.0, H - 10.0), (200.0, H - 200.0), 500, 600), Gesture::SwipeUp);
+        assert_eq!(
+            swipe(&mut t, (200.0, H - 10.0), (200.0, H - 200.0), 500, 600),
+            Gesture::SwipeUp
+        );
     }
 
     #[test]
     fn slow_second_swipe_is_not_double() {
         let mut t = tracker();
         swipe(&mut t, (200.0, H - 10.0), (200.0, H - 200.0), 0, 100);
-        assert_eq!(swipe(&mut t, (200.0, H - 10.0), (200.0, H - 200.0), 1500, 1600), Gesture::SwipeUp);
+        assert_eq!(
+            swipe(&mut t, (200.0, H - 10.0), (200.0, H - 200.0), 1500, 1600),
+            Gesture::SwipeUp
+        );
     }
 
     #[test]
     fn hold_on_bottom_anchor() {
-        assert_eq!(swipe(&mut tracker(), (200.0, H - 10.0), (201.0, H - 10.0), 0, 900), Gesture::HoldBottom);
+        assert_eq!(
+            swipe(&mut tracker(), (200.0, H - 10.0), (201.0, H - 10.0), 0, 900),
+            Gesture::HoldBottom
+        );
     }
 
     #[test]
     fn short_press_is_tap_and_hold_elsewhere_is_tap() {
-        assert_eq!(swipe(&mut tracker(), (200.0, H - 10.0), (200.0, H - 10.0), 0, 100), Gesture::Tap);
-        assert_eq!(swipe(&mut tracker(), (200.0, 300.0), (200.0, 300.0), 0, 2000), Gesture::Tap);
+        assert_eq!(
+            swipe(&mut tracker(), (200.0, H - 10.0), (200.0, H - 10.0), 0, 100),
+            Gesture::Tap
+        );
+        assert_eq!(
+            swipe(&mut tracker(), (200.0, 300.0), (200.0, 300.0), 0, 2000),
+            Gesture::Tap
+        );
     }
 
     #[test]

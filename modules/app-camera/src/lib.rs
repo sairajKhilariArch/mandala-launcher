@@ -33,7 +33,9 @@ pub struct Camera {
 
 impl Camera {
     pub fn new() -> Self {
-        Self { captures: PathBuf::new() }
+        Self {
+            captures: PathBuf::new(),
+        }
     }
 
     fn ensure_ready(&self) -> Result<&Path, ModuleReply> {
@@ -49,7 +51,9 @@ impl Camera {
         if let Ok(rd) = std::fs::read_dir(&self.captures) {
             for entry in rd.flatten() {
                 let path = entry.path();
-                let Ok(meta) = std::fs::metadata(&path) else { continue };
+                let Ok(meta) = std::fs::metadata(&path) else {
+                    continue;
+                };
                 if !meta.is_file() {
                     continue;
                 }
@@ -76,7 +80,10 @@ impl Camera {
             out.push_str(&format!("{:>10}  {}\n", human(*bytes), name));
         }
         if total > MAX_LIST {
-            out.push_str(&format!("… and {} more (use `list <fragment>`)\n", total - MAX_LIST));
+            out.push_str(&format!(
+                "… and {} more (use `list <fragment>`)\n",
+                total - MAX_LIST
+            ));
         }
         out.push_str(&format!("\n{total} file(s)"));
         out
@@ -85,8 +92,14 @@ impl Camera {
     fn info(&self, name: &str) -> Result<String, String> {
         let path = self.resolve(name)?;
         let meta = std::fs::metadata(&path).map_err(|e| format!("info: {e}"))?;
-        let ext = path.extension().map(|e| e.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
-        let kind = if matches!(ext.as_str(), "png" | "jpg" | "jpeg" | "gif" | "bmp" | "webp" | "heic") {
+        let ext = path
+            .extension()
+            .map(|e| e.to_string_lossy().to_ascii_lowercase())
+            .unwrap_or_default();
+        let kind = if matches!(
+            ext.as_str(),
+            "png" | "jpg" | "jpeg" | "gif" | "bmp" | "webp" | "heic"
+        ) {
             "image"
         } else if matches!(ext.as_str(), "mp4" | "mkv" | "mov" | "webm" | "avi") {
             "video"
@@ -99,7 +112,12 @@ impl Camera {
                 dims = format!("   {w}x{h}");
             }
         }
-        Ok(format!("{}\n  kind    {kind}{dims}\n  size    {}\n  path    {}", name, human(meta.len()), path.display()))
+        Ok(format!(
+            "{}\n  kind    {kind}{dims}\n  size    {}\n  path    {}",
+            name,
+            human(meta.len()),
+            path.display()
+        ))
     }
 
     fn remove(&self, name: &str) -> Result<String, String> {
@@ -119,7 +137,11 @@ impl Camera {
         if name.is_empty() {
             return Err("file name required".into());
         }
-        if name.contains('/') || name.contains('\\') || name.contains("..") || Path::new(name).is_absolute() {
+        if name.contains('/')
+            || name.contains('\\')
+            || name.contains("..")
+            || Path::new(name).is_absolute()
+        {
             return Err("plain file names only (no paths)".into());
         }
         let path = self.captures.join(name);
@@ -178,8 +200,25 @@ directory and review tools still work everywhere.";
 /// Only images and videos are listed; stray files in the captures directory
 /// (`.nomedia`, partial writes) are ignored.
 fn is_media(name: &str) -> bool {
-    let ext = Path::new(name).extension().map(|e| e.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
-    matches!(ext.as_str(), "png" | "jpg" | "jpeg" | "gif" | "bmp" | "webp" | "heic" | "mp4" | "mkv" | "mov" | "webm" | "avi")
+    let ext = Path::new(name)
+        .extension()
+        .map(|e| e.to_string_lossy().to_ascii_lowercase())
+        .unwrap_or_default();
+    matches!(
+        ext.as_str(),
+        "png"
+            | "jpg"
+            | "jpeg"
+            | "gif"
+            | "bmp"
+            | "webp"
+            | "heic"
+            | "mp4"
+            | "mkv"
+            | "mov"
+            | "webm"
+            | "avi"
+    )
 }
 
 fn human(bytes: u64) -> String {
@@ -205,14 +244,20 @@ fn probe_dimensions(path: &Path) -> Option<(u32, u32)> {
         if n < 10 {
             return None;
         }
-        return Some((u32::from(u16::from_le_bytes([head[6], head[7]])), u32::from(u16::from_le_bytes([head[8], head[9]]))));
+        return Some((
+            u32::from(u16::from_le_bytes([head[6], head[7]])),
+            u32::from(u16::from_le_bytes([head[8], head[9]])),
+        ));
     }
     if n < 24 {
         return None;
     }
     // PNG: IHDR at fixed offset 16.
     if head.starts_with(&[0x89, b'P', b'N', b'G']) {
-        return Some((u32::from_be_bytes([head[16], head[17], head[18], head[19]]), u32::from_be_bytes([head[20], head[21], head[22], head[23]])));
+        return Some((
+            u32::from_be_bytes([head[16], head[17], head[18], head[19]]),
+            u32::from_be_bytes([head[20], head[21], head[22], head[23]]),
+        ));
     }
     // BMP: DIB header, width/height are signed 32-bit LE at 18/22.
     if head.starts_with(b"BM") {
@@ -279,7 +324,11 @@ mod tests {
     fn ready() -> (tempfile::TempDir, Camera) {
         let dir = tempfile::tempdir().unwrap();
         let mut c = Camera::new();
-        c.init(&ModuleContext { data_dir: dir.path().to_string_lossy().into(), host: Host::detached("app-camera") }).unwrap();
+        c.init(&ModuleContext {
+            data_dir: dir.path().to_string_lossy().into(),
+            host: Host::detached("app-camera"),
+        })
+        .unwrap();
         (dir, c)
     }
 
@@ -291,16 +340,21 @@ mod tests {
 
     /// A 1x1 PNG (the canonical smallest valid PNG).
     const PNG_1X1: [u8; 67] = [
-        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06,
-        0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4, 0x89, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x62, 0x00, 0x01, 0x00, 0x00, 0x05, 0x00, 0x01,
-        0x0D, 0x0A, 0x2D, 0xB4, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
+        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44,
+        0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1F,
+        0x15, 0xC4, 0x89, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x62, 0x00,
+        0x01, 0x00, 0x00, 0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00, 0x00, 0x00, 0x00, 0x49,
+        0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
     ];
 
     #[test]
     fn empty_state_explains_the_pipeline() {
         let (_d, mut c) = ready();
         let out = ok(&mut c, "");
-        assert!(out.contains("Nothing captured yet") && out.contains("camera"), "{out}");
+        assert!(
+            out.contains("Nothing captured yet") && out.contains("camera"),
+            "{out}"
+        );
         assert!(ok(&mut c, "path").ends_with("captures"));
         assert!(ok(&mut c, "help").contains("Open Camera"));
     }
@@ -314,12 +368,18 @@ mod tests {
         std::fs::write(cap.join("notes.txt"), b"not media").unwrap();
 
         let out = ok(&mut c, "list");
-        assert!(out.contains("IMG_0002.jpg") && out.contains("2.0 KiB"), "{out}");
+        assert!(
+            out.contains("IMG_0002.jpg") && out.contains("2.0 KiB"),
+            "{out}"
+        );
         assert!(out.contains("2 file(s)"), "non-media excluded: {out}");
         assert!(!out.contains("notes.txt"), "{out}");
 
         let filtered = ok(&mut c, "list img_0001");
-        assert!(filtered.contains("IMG_0001.png") && !filtered.contains("IMG_0002"), "{filtered}");
+        assert!(
+            filtered.contains("IMG_0001.png") && !filtered.contains("IMG_0002"),
+            "{filtered}"
+        );
 
         let info = ok(&mut c, "info IMG_0001.png");
         assert!(info.contains("image") && info.contains("1x1"), "{info}");
@@ -361,7 +421,10 @@ mod tests {
         std::fs::write(&bmp, &bytes).unwrap();
         assert_eq!(probe_dimensions(&bmp), Some((2, 3)));
 
-        assert_eq!(probe_dimensions(d.path().join("missing.png").as_path()), None);
+        assert_eq!(
+            probe_dimensions(d.path().join("missing.png").as_path()),
+            None
+        );
     }
 
     #[test]
