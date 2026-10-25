@@ -1,5 +1,0 @@
-{
-  "id": "app-calculator",
-  "label": "Calculator",
-  "description": "Expression evaluator: `= 2*(3+4)` from the command bar; results can be saved to Notes."
-}
