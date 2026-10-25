@@ -1,27 +1,11 @@
+# Standalone workspace for the app-vault module.
+# This module is developed and released from its own branch
+# (mod/app-vault); the launcher shell lives on `main`. See release.md.
 [workspace]
 resolver = "2"
 members = [
     "crates/mandala-module-api",
-    "crates/mandala-core",
-    "crates/mandala-ui",
-    "crates/mandala-shell",
-    "modules/app-notes",
-    "modules/app-calculator",
-    "modules/app-terminal",
-    "modules/app-aegis",
     "modules/app-vault",
-    "modules/app-localsend",
-    "modules/app-tasks",
-    "modules/app-reader",
-    "modules/app-gallery",
-    "modules/app-rss",
-    "modules/app-weather",
-    "modules/app-chat",
-    "modules/app-ai",
-    "modules/app-camera",
-    "tools/mandala-sign",
-    "tools/mandala-perf",
-    "tools/mandala-android-probe",
 ]
 
 [workspace.package]
@@ -31,25 +15,20 @@ license = "MIT"
 rust-version = "1.80"
 authors = ["Mandala Team"]
 
+# Only the dependencies this workspace actually builds against. Version pins
+# mirror the shell's root workspace on `main` so an ABI-tested combination of
+# the module API and its dlopen consumer is not accidentally diverged.
 [workspace.dependencies]
 anyhow = "1"
-ed25519-dalek = { version = "2", features = ["rand_core"] }
 hex = "0.4"
-libloading = "0.8"
-log = "0.4"
-env_logger = "0.11"
 rand = "0.8"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
-thiserror = "1"
-tokio = { version = "1", features = ["rt-multi-thread", "sync", "macros", "time"] }
+tempfile = "3"
 ureq = "3"
 roxmltree = "0.20"
-
 mandala-module-api = { path = "crates/mandala-module-api" }
-mandala-core = { path = "crates/mandala-core" }
-mandala-ui = { path = "crates/mandala-ui" }
 
 [profile.release]
 opt-level = 3

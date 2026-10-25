@@ -1,5 +1,0 @@
-{
-  "id": "app-rss",
-  "label": "RSS Reader",
-  "description": "Fetch and read RSS/Atom feeds; read state is kept locally."
-}
