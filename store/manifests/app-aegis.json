@@ -1,5 +1,0 @@
-{
-  "id": "app-aegis",
-  "label": "2FA Authenticator",
-  "description": "TOTP authenticator for 2FA codes; secrets are stored encrypted locally."
-}
