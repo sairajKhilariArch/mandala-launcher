@@ -1,5 +1,0 @@
-{
-  "id": "app-weather",
-  "label": "Weather",
-  "description": "Forecasts from a user-configured endpoint, cached so the last reading works offline."
-}
