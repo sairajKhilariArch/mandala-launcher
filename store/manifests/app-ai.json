@@ -1,5 +1,0 @@
-{
-  "id": "app-ai",
-  "label": "AI Assistant",
-  "description": "Assistant against your own OpenAI-compatible endpoint. The key is stored app-private with `key <value>`."
-}
