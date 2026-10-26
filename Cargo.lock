@@ -2023,6 +2023,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "i-slint-backend-testing"
+version = "1.18.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "01943d6c5ea5bc913d497bdaa423c309e7627afff47a6794bfd13be5c564209f"
+dependencies = [
+ "cfg_aliases",
+ "i-slint-common",
+ "i-slint-core",
+ "vtable",
+]
+
+[[package]]
 name = "i-slint-backend-winit"
 version = "1.18.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2983,6 +2995,8 @@ dependencies = [
 name = "mandala-ui"
 version = "0.1.0"
 dependencies = [
+ "i-slint-backend-testing",
+ "i-slint-core",
  "mandala-core",
  "slint",
  "slint-build",

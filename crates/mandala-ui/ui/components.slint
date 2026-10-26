@@ -1,9 +1,14 @@
 import { ThemePalette, Scale } from "theme_tokens.slint";
 
-// shortcut: buttons are pointer/touch-driven — no per-control keyboard tab
-// focus. The command bar is the keyboard path (fuzzy-launch any app from it)
-// and Escape/back dismisses every overlay; upgrade to a focus loop if desktop
-// keyboard navigation of individual controls is ever needed.
+// Keyboard model: every control carries a FocusScope. Slint's window walks
+// the focus chain on Tab/Shift+Tab, so the loop reaches the command bar and
+// every visible control; Enter or Space activates the focused one. The ring
+// is the theme accent, drawn instantly, and only ever appears for Tab focus
+// (zero-geometry FocusScopes are never hit by a pointer, so mouse users see
+// no ring).
+// shortcut: Escape while a control has focus bubbles to the window and is
+// dropped there — the same path the command input has always had. Overlay
+// close works from the default focus state and via the CLOSE buttons.
 
 // One rendered panel position or All-Apps row: an app (id set) or an empty
 // holder (placeholder). `icon` is a monogram glyph computed in Rust — no
@@ -38,14 +43,25 @@ export component SlotButton inherits Rectangle {
     in property <string> label;
     in property <bool> placeholder: false;
     in property <color> accent: ThemePalette.accent-focus;
+    // False while the control sits behind an overlay/drawer: it then drops
+    // out of the Tab loop instead of parking focus on an invisible ring.
+    in property <bool> focusable: true;
     callback activated();
     callback open-store();
 
     background: (touch.pressed || (touch.has-hover && !root.placeholder)) ? ThemePalette.surface-border : ThemePalette.surface-primary;
     border-radius: ThemePalette.corner-radius;
-    border-width: ThemePalette.border-width;
-    border-color: placeholder ? ThemePalette.canvas-bg : ThemePalette.surface-border;
+    border-width: fs.has-focus ? Scale.ring-width : ThemePalette.border-width;
+    border-color: fs.has-focus ? ThemePalette.accent-focus : (placeholder ? ThemePalette.canvas-bg : ThemePalette.surface-border);
     opacity: placeholder ? 0.45 : 1.0;
+
+    function trigger() {
+        if (root.placeholder) {
+            root.open-store();
+        } else {
+            root.activated();
+        }
+    }
 
     VerticalLayout {
         alignment: center;
@@ -82,15 +98,21 @@ export component SlotButton inherits Rectangle {
         }
     }
 
-    touch := TouchArea {
-
-        clicked => {
-            if (root.placeholder) {
-                root.open-store();
+    fs := FocusScope {
+        enabled: root.focusable;
+        key-pressed(e) => {
+            if (e.text == "\n" || e.text == " ") {
+                root.trigger();
+                accept
             } else {
-                root.activated();
+                // Tab falls through to the window's focus loop.
+                reject
             }
         }
+    }
+
+    touch := TouchArea {
+        clicked => { root.trigger(); }
     }
 }
 
@@ -101,15 +123,24 @@ export component RailTile inherits Rectangle {
     in property <string> label;
     in property <bool> placeholder: false;
     in property <color> accent: ThemePalette.accent-focus;
+    in property <bool> focusable: true;
     callback activated();
     callback open-store();
 
     height: 56px;
     background: (ta.pressed || (ta.has-hover && !root.placeholder)) ? ThemePalette.surface-border : ThemePalette.canvas-bg;
     border-radius: ThemePalette.corner-radius;
-    border-width: ThemePalette.border-width;
-    border-color: ThemePalette.surface-border;
+    border-width: fs.has-focus ? Scale.ring-width : ThemePalette.border-width;
+    border-color: fs.has-focus ? ThemePalette.accent-focus : ThemePalette.surface-border;
     opacity: placeholder ? 0.35 : 1.0;
+
+    function trigger() {
+        if (root.placeholder) {
+            root.open-store();
+        } else {
+            root.activated();
+        }
+    }
 
     Rectangle {
         height: 32px;
@@ -129,15 +160,21 @@ export component RailTile inherits Rectangle {
         }
     }
 
-    // Long-press (or tap on placeholder) surfaces the label + opens store.
-    ta := TouchArea {
-        clicked => {
-            if (root.placeholder) {
-                root.open-store();
+    fs := FocusScope {
+        enabled: root.focusable;
+        key-pressed(e) => {
+            if (e.text == "\n" || e.text == " ") {
+                root.trigger();
+                accept
             } else {
-                root.activated();
+                reject
             }
         }
+    }
+
+    // Long-press (or tap on placeholder) surfaces the label + opens store.
+    ta := TouchArea {
+        clicked => { root.trigger(); }
     }
 }
 
@@ -147,15 +184,24 @@ export component SlotRow inherits Rectangle {
     in property <string> label;
     in property <bool> placeholder: false;
     in property <color> accent: ThemePalette.accent-focus;
+    in property <bool> focusable: true;
     callback activated();
     callback open-store();
 
     height: 52px;
     background: (touch.pressed || (touch.has-hover && !root.placeholder)) ? ThemePalette.surface-border : ThemePalette.canvas-bg;
     border-radius: ThemePalette.corner-radius;
-    border-width: ThemePalette.border-width;
-    border-color: ThemePalette.surface-border;
+    border-width: fs.has-focus ? Scale.ring-width : ThemePalette.border-width;
+    border-color: fs.has-focus ? ThemePalette.accent-focus : (placeholder ? ThemePalette.canvas-bg : ThemePalette.surface-border);
     opacity: placeholder ? 0.45 : 1.0;
+
+    function trigger() {
+        if (root.placeholder) {
+            root.open-store();
+        } else {
+            root.activated();
+        }
+    }
 
     HorizontalLayout {
         padding-left: Scale.space-3;
@@ -189,14 +235,20 @@ export component SlotRow inherits Rectangle {
         }
     }
 
-    touch := TouchArea {
-        clicked => {
-            if (root.placeholder) {
-                root.open-store();
+    fs := FocusScope {
+        enabled: root.focusable;
+        key-pressed(e) => {
+            if (e.text == "\n" || e.text == " ") {
+                root.trigger();
+                accept
             } else {
-                root.activated();
+                reject
             }
         }
+    }
+
+    touch := TouchArea {
+        clicked => { root.trigger(); }
     }
 }
 
@@ -204,13 +256,14 @@ export component ActionButton inherits Rectangle {
     in property <string> text;
     // Primary actions (install, exit) carry the theme's CTA colour.
     in property <bool> primary: false;
+    in property <bool> focusable: true;
     callback clicked();
 
     height: Scale.control-height;
     background: touch.pressed ? ThemePalette.surface-border : (root.primary ? ThemePalette.cta-accent : (touch.has-hover ? ThemePalette.surface-border : ThemePalette.surface-primary));
     border-radius: ThemePalette.corner-radius;
-    border-width: ThemePalette.border-width;
-    border-color: ThemePalette.surface-border;
+    border-width: fs.has-focus ? Scale.ring-width : ThemePalette.border-width;
+    border-color: fs.has-focus ? ThemePalette.accent-focus : ThemePalette.surface-border;
 
     Text {
         text: root.text;
@@ -219,6 +272,18 @@ export component ActionButton inherits Rectangle {
         font-size: Scale.font-small;
         horizontal-alignment: center;
         vertical-alignment: center;
+    }
+
+    fs := FocusScope {
+        enabled: root.focusable;
+        key-pressed(e) => {
+            if (e.text == "\n" || e.text == " ") {
+                root.clicked();
+                accept
+            } else {
+                reject
+            }
+        }
     }
 
     touch := TouchArea {

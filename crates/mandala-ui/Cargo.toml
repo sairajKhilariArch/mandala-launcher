@@ -14,3 +14,12 @@ slint = { version = "1.9", default-features = false, features = ["std", "compat-
 
 [build-dependencies]
 slint-build = "1.9"
+
+[dev-dependencies]
+# Headless backend for the focus-loop test: injects Tab/Enter/Escape into
+# the real MainWindow without a display. `ffi` unlocks the raw key-sender
+# (the `internal` feature does not compile from crates.io: it include_bytes!
+# font files that only exist in Slint's git repo).
+i-slint-backend-testing = { version = "1.18", features = ["ffi"] }
+# WindowAdapterRc access for that key-sender (same 1.18.1 the lock already uses).
+i-slint-core = "1.18"

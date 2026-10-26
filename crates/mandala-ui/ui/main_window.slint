@@ -64,6 +64,15 @@ export component MainWindow inherits Window {
     property <bool> right-visible: root.expanded || root.right-open;
     // Any full-screen overlay hides the panels underneath.
     property <bool> overlay-open: root.monitor-open || root.store-open || root.apps-open;
+    // Tab-loop gates: controls hidden behind a modal overlay or an open
+    // drawer drop out of the focus chain — the ring would land where
+    // nothing can be seen. Drawers docked (expanded) never cover the
+    // workspace, so the workspace gate passes there.
+    property <bool> workspace-focus: !root.overlay-open && (root.expanded || (!root.left-open && !root.right-open));
+    property <bool> left-rail-focus: !root.overlay-open && !root.left-open;
+    property <bool> right-rail-focus: !root.overlay-open && !root.right-open;
+    property <bool> left-drawer-focus: root.left-visible && !root.overlay-open;
+    property <bool> right-drawer-focus: root.right-visible && !root.overlay-open;
 
     init => {
         Responsive.window-width = root.width;
@@ -79,9 +88,12 @@ export component MainWindow inherits Window {
     // this one holds focus whenever no other element does (init), and the
     // workspace scope below catches Escape rejected by the text input.
     back_idle := FocusScope {
+        // Parks the initial focus only: Escape/back works before anything
+        // is clicked, but Tab skips straight past it to the command bar.
+        focus-on-tab-navigation: false;
         init => { self.focus(); }
         key-pressed(e) => {
-            if e.text == "\\e" {
+            if e.text == "\u{1b}" {
                 root.back();
                 accept
             } else {
@@ -104,8 +116,9 @@ export component MainWindow inherits Window {
     // Centre workspace. FocusScope so Escape rejected by the query input
     // (which never consumes it) still bubbles into the back handler.
     workspace_keys := FocusScope {
+        focus-on-tab-navigation: false;
         key-pressed(e) => {
-            if e.text == "\\e" {
+            if e.text == "\u{1b}" {
                 root.back();
                 accept
             } else {
@@ -139,6 +152,7 @@ export component MainWindow inherits Window {
             }
 
             input := TextInput {
+                enabled: root.workspace-focus;
                 x: Scale.space-3;
                 width: parent.width - (Scale.space-3 * 2);
                 height: parent.height;
@@ -171,6 +185,7 @@ export component MainWindow inherits Window {
             height: 64px;
             spacing: Scale.space-2;
             for slot in root.panel-a: SlotButton {
+                focusable: root.workspace-focus;
                 icon: slot.icon;
                 label: slot.label;
                 placeholder: slot.placeholder;
@@ -197,6 +212,7 @@ export component MainWindow inherits Window {
             padding-bottom: Scale.space-2;
             spacing: Scale.space-2;
             for slot in root.panel-b: RailTile {
+                focusable: root.left-rail-focus;
                 icon: slot.icon;
                 label: slot.label;
                 placeholder: slot.placeholder;
@@ -207,6 +223,7 @@ export component MainWindow inherits Window {
             Rectangle { vertical-stretch: 1; }
             // The only exit of the whole shell, pinned bottom-left of home.
             ActionButton {
+                focusable: root.left-rail-focus;
                 text: "EXIT";
                 primary: true;
                 clicked => { root.exit-shell(); }
@@ -229,6 +246,7 @@ export component MainWindow inherits Window {
             spacing: Scale.space-2;
             alignment: start;
             for slot in root.panel-c: RailTile {
+                focusable: root.right-rail-focus;
                 icon: slot.icon;
                 label: slot.label;
                 placeholder: slot.placeholder;
@@ -270,6 +288,7 @@ export component MainWindow inherits Window {
             padding-top: Scale.gutter-top;
             spacing: Scale.space-2;
             for slot in root.panel-b: SlotRow {
+                focusable: root.left-drawer-focus;
                 icon: slot.icon;
                 label: slot.label;
                 placeholder: slot.placeholder;
@@ -280,6 +299,7 @@ export component MainWindow inherits Window {
             Rectangle { vertical-stretch: 1; }
             // Same exit affordance on the docked/open drawer (expanded layout).
             ActionButton {
+                focusable: root.left-drawer-focus;
                 text: "EXIT";
                 primary: true;
                 clicked => { root.exit-shell(); }
@@ -302,6 +322,7 @@ export component MainWindow inherits Window {
             padding-top: Scale.gutter-top;
             spacing: Scale.space-2;
             for slot in root.panel-c: SlotRow {
+                focusable: root.right-drawer-focus;
                 icon: slot.icon;
                 label: slot.label;
                 placeholder: slot.placeholder;

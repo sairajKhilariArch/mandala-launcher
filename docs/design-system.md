@@ -73,10 +73,18 @@ window default 412×915.
 * **Disabled/placeholder:** empty slots render at reduced opacity and open
   the Store instead of firing.
 * **Timing:** drawer slide 180ms ease-out; nothing else animates.
-* **Keyboard:** pointer/touch-driven controls have no per-control tab focus
-  (documented `shortcut:` in `components.slint`). The command bar is the
-  keyboard path — fuzzy-launches any app — and Escape/back dismisses every
-  overlay without exiting the shell.
+* **Keyboard:** Tab / Shift+Tab walk the focus chain — command bar first,
+  then every visible control (Slint's window-level focus loop; the root
+  scopes opt out so no invisible stops exist). Enter or Space activates the
+  focused control; the ring is the theme accent at `Scale.ring-width` and
+  appears only for Tab focus, instantly. Controls hidden behind a modal
+  overlay or an open drawer are `enabled: false`, so the ring never lands
+  under something opaque. Escape (and Android back) fires `back()` from the
+  default focus state — the two root scopes compare against `"\u{1b}"`; the
+  old `"\\e"` literal never matched, so back-via-Escape did nothing before
+  this phase (caught by `tests/tab_focus.rs`).
+  `shortcut:` Escape while a *control* has focus bubbles to the window and
+  is dropped there; close overlays with Tab + Enter on the CLOSE button.
 
 Touch targets: every control is ≥44px in its smallest dimension
 (`Scale.touch-min`); inputs and buttons are 48px (`Scale.control-height`),
