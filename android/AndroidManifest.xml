@@ -39,7 +39,7 @@
             android:name="android.app.NativeActivity"
             android:exported="true"
             android:launchMode="singleTask"
-            android:screenOrientation="portrait"
+            android:screenOrientation="fullSensor"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode|density">
             <meta-data android:name="android.app.lib_name" android:value="mandala_shell" />
             <intent-filter>

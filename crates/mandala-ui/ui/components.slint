@@ -1,9 +1,13 @@
 import { ThemePalette } from "theme_tokens.slint";
 
+// One rendered panel position or All-Apps row: an app (id set) or an empty
+// holder (placeholder). `icon` is a monogram glyph computed in Rust — no
+// image assets, consistent with the text-first design.
 export struct SlotItem {
     id: string,
-    tag: string,
     label: string,
+    icon: string,
+    placeholder: bool,
 }
 
 // One row of the module-store overlay. `status` is pre-rendered by the
@@ -18,79 +22,169 @@ export struct StoreItem {
     actionable: bool,
 }
 
-// Compact square-ish button used by the bottom dock (Panel A).
+// Square-ish icon tile + label. Used by the bottom dock (Panel A) and the
+// always-visible side rails. A placeholder is an empty app holder: tapping it
+// opens the Store so the user can fill the slot.
 export component SlotButton inherits Rectangle {
-    in property <string> tag;
+    in property <string> icon;
     in property <string> label;
+    in property <bool> placeholder: false;
     callback activated();
+    callback open-store();
 
     background: touch.pressed ? ThemePalette.surface-border : ThemePalette.surface-primary;
     border-radius: ThemePalette.corner-radius;
     border-width: ThemePalette.border-width;
-    border-color: ThemePalette.surface-border;
+    border-color: placeholder ? ThemePalette.canvas-bg : ThemePalette.surface-border;
+    opacity: placeholder ? 0.45 : 1.0;
 
     VerticalLayout {
         alignment: center;
         padding: 4px;
         spacing: 2px;
-        Text {
-            text: root.tag;
-            color: ThemePalette.accent-focus;
-            font-family: ThemePalette.font-family;
-            font-size: 10px;
-            horizontal-alignment: center;
+
+        // Monogram icon tile.
+        Rectangle {
+            height: 28px;
+            width: 28px;
+            x: (parent.width - self.width) / 2;
+            background: ThemePalette.canvas-bg;
+            border-radius: 4px;
+            border-width: ThemePalette.border-width;
+            border-color: ThemePalette.surface-border;
+
+            Text {
+                text: root.placeholder ? "+" : root.icon;
+                color: root.placeholder ? ThemePalette.text-secondary : ThemePalette.accent-focus;
+                font-family: ThemePalette.font-family;
+                font-size: 14px;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
         }
+
         Text {
-            text: root.label;
+            text: root.placeholder ? "" : root.label;
             color: ThemePalette.text-primary;
             font-family: ThemePalette.font-family;
-            font-size: 11px;
+            font-size: 10px;
             horizontal-alignment: center;
             wrap: word-wrap;
         }
     }
 
     touch := TouchArea {
-        clicked => { root.activated(); }
+        clicked => {
+            if (root.placeholder) {
+                root.open-store();
+            } else {
+                root.activated();
+            }
+        }
     }
 }
 
-// Full-width row used inside the side drawers (Panels B and C).
-export component SlotRow inherits Rectangle {
-    in property <string> tag;
+// Narrow rail tile for the always-visible side columns: monogram only, no
+// label — the rail is ~76px wide and labels would truncate to nothing.
+export component RailTile inherits Rectangle {
+    in property <string> icon;
     in property <string> label;
+    in property <bool> placeholder: false;
     callback activated();
+    callback open-store();
+
+    height: 56px;
+    background: ta.pressed ? ThemePalette.surface-border : ThemePalette.canvas-bg;
+    border-radius: ThemePalette.corner-radius;
+    border-width: ThemePalette.border-width;
+    border-color: ThemePalette.surface-border;
+    opacity: placeholder ? 0.35 : 1.0;
+
+    Rectangle {
+        height: 32px;
+        width: 32px;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        background: ThemePalette.surface-primary;
+        border-radius: 4px;
+
+        Text {
+            text: root.placeholder ? "+" : root.icon;
+            color: root.placeholder ? ThemePalette.text-secondary : ThemePalette.accent-focus;
+            font-family: ThemePalette.font-family;
+            font-size: 15px;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+
+    // Long-press (or tap on placeholder) surfaces the label + opens store.
+    ta := TouchArea {
+        clicked => {
+            if (root.placeholder) {
+                root.open-store();
+            } else {
+                root.activated();
+            }
+        }
+    }
+}
+
+// Full-width row used inside the side drawers and the All Apps overlay.
+export component SlotRow inherits Rectangle {
+    in property <string> icon;
+    in property <string> label;
+    in property <bool> placeholder: false;
+    callback activated();
+    callback open-store();
 
     height: 52px;
     background: touch.pressed ? ThemePalette.surface-border : ThemePalette.canvas-bg;
     border-radius: ThemePalette.corner-radius;
     border-width: ThemePalette.border-width;
     border-color: ThemePalette.surface-border;
+    opacity: placeholder ? 0.45 : 1.0;
 
     HorizontalLayout {
         padding-left: 12px;
         padding-right: 12px;
         spacing: 12px;
-        Text {
-            text: root.tag;
-            color: ThemePalette.accent-focus;
-            font-family: ThemePalette.font-family;
-            font-size: 12px;
-            vertical-alignment: center;
-            min-width: 24px;
+
+        Rectangle {
+            width: 32px;
+            height: 32px;
+            background: ThemePalette.surface-primary;
+            border-radius: 4px;
+
+            Text {
+                text: root.placeholder ? "+" : root.icon;
+                color: root.placeholder ? ThemePalette.text-secondary : ThemePalette.accent-focus;
+                font-family: ThemePalette.font-family;
+                font-size: 14px;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
         }
+
         Text {
-            text: root.label;
-            color: ThemePalette.text-primary;
+            text: root.placeholder ? "add from store" : root.label;
+            color: root.placeholder ? ThemePalette.text-secondary : ThemePalette.text-primary;
             font-family: ThemePalette.font-family;
             font-size: 15px;
             vertical-alignment: center;
             horizontal-stretch: 1;
+            overflow: elide;
         }
     }
 
     touch := TouchArea {
-        clicked => { root.activated(); }
+        clicked => {
+            if (root.placeholder) {
+                root.open-store();
+            } else {
+                root.activated();
+            }
+        }
     }
 }
 

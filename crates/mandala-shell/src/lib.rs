@@ -32,17 +32,31 @@ fn load_trust(paths: &HostPaths) -> anyhow::Result<TrustStore> {
     Ok(trust)
 }
 
+/// Ids of every signed module binary sitting in `modules/` right now — the
+/// panels compose from this list (they are app holders, not permanent apps).
+pub(crate) fn installed_module_ids(paths: &HostPaths) -> Vec<String> {
+    let ext = std::env::consts::DLL_EXTENSION;
+    let mut ids: Vec<String> = std::fs::read_dir(paths.modules_dir())
+        .map(|rd| {
+            rd.flatten()
+                .filter_map(|e| {
+                    let p = e.path();
+                    if p.extension().and_then(|x| x.to_str()) != Some(ext) {
+                        return None;
+                    }
+                    p.file_stem().map(|s| s.to_string_lossy().into_owned())
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    ids.sort();
+    ids
+}
+
 /// How many signed module binaries are sitting in `modules/` right now —
 /// part of the first-run summary so an empty install is visible in logcat.
 fn installed_module_count(paths: &HostPaths) -> usize {
-    let ext = std::env::consts::DLL_EXTENSION;
-    std::fs::read_dir(paths.modules_dir())
-        .map(|rd| {
-            rd.flatten()
-                .filter(|e| e.path().extension().and_then(|x| x.to_str()) == Some(ext))
-                .count()
-        })
-        .unwrap_or(0)
+    installed_module_ids(paths).len()
 }
 
 /// Build every subsystem, show the window and block until it closes.
@@ -97,7 +111,8 @@ fn run_inner(paths: HostPaths, exit_after_boot: bool) -> anyhow::Result<()> {
 
     let ui = MainWindow::new().context("creating window")?;
     let after_window = boot.elapsed();
-    mandala_ui::populate_slots(&ui);
+    let installed = installed_module_ids(&paths);
+    mandala_ui::populate_slots(&ui, &installed);
 
     let app = App::new(
         broker.clone(),
@@ -105,6 +120,7 @@ fn run_inner(paths: HostPaths, exit_after_boot: bool) -> anyhow::Result<()> {
         themes,
         runtime.handle().clone(),
         ui.as_weak(),
+        installed,
     );
     app.apply_current_theme(&ui);
 
@@ -119,6 +135,22 @@ fn run_inner(paths: HostPaths, exit_after_boot: bool) -> anyhow::Result<()> {
     ui.on_slot_activated({
         let app = app.clone();
         move |id| app.dispatch(Action::OpenSlot(id.to_string()))
+    });
+    // All Apps overlay rows: `store` opens the store, anything else launches.
+    ui.on_app_activated({
+        let app = app.clone();
+        move |id| {
+            if id == "store" {
+                app.dispatch(Action::StoreOpen)
+            } else {
+                app.dispatch(Action::OpenSlot(id.to_string()))
+            }
+        }
+    });
+    // Empty holders (placeholders) open the Store so the slot can be filled.
+    ui.on_open_store({
+        let app = app.clone();
+        move || app.dispatch(Action::StoreOpen)
     });
     ui.on_query_changed({
         let app = app.clone();

@@ -36,9 +36,11 @@ impl App {
         themes: ThemeManager,
         rt: tokio::runtime::Handle,
         ui: slint::Weak<MainWindow>,
+        installed: Vec<String>,
     ) -> Arc<Self> {
         let state = AppState {
             theme_id: themes.current().id.clone(),
+            installed,
             ..AppState::default()
         };
         let store = Store::new(&host.paths().root);
@@ -185,6 +187,10 @@ impl App {
                 // Rows are recomputed from disk so the reducer never has to
                 // duplicate install bookkeeping.
                 let rows = self.store.rows(&self.host);
+                // Panels are app holders: refresh the installed set so a
+                // newly installed module appears without a restart.
+                let installed = crate::installed_module_ids(self.host.paths());
+                self.dispatch(Action::InstalledChanged(installed));
                 self.dispatch(Action::StoreInstallDone { ok, msg, rows });
             }
         }

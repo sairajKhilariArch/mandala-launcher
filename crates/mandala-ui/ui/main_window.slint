@@ -1,12 +1,15 @@
 import { ThemePalette, Responsive } from "theme_tokens.slint";
-import { SlotItem, SlotButton, SlotRow, StoreItem, ActionButton } from "components.slint";
+import { SlotItem, SlotButton, RailTile, SlotRow, StoreItem, ActionButton } from "components.slint";
 
 export { ThemePalette, Responsive, SlotItem, StoreItem }
 
 // Tri-panel shell:
 //   centre  = command input + canvas + Panel A dock (bottom thumb zone)
-//   left    = Panel B drawer (passive information)
-//   right   = Panel C drawer (active utilities & security)
+//   left    = Panel B: always-visible rail (compact) / drawer (expanded)
+//   right   = Panel C: always-visible rail (compact) / drawer (expanded)
+// The rails are app holders, not permanent apps: empty positions are
+// placeholders that open the Store. While a module is active (`app-open`)
+// every panel vanishes; the home gesture brings them back.
 // All gesture *classification* happens in Rust (mandala-core::gesture); this
 // file only reports raw pointer down/up events.
 export component MainWindow inherits Window {
@@ -27,11 +30,16 @@ export component MainWindow inherits Window {
     in property <bool> right-open;
     in property <bool> monitor-open;
     in property <bool> store-open;
+    in property <bool> apps-open;
+    in property <bool> app-open;
     in property <[StoreItem]> store-rows;
+    in property <[SlotItem]> app-rows;
     in property <string> store-status;
     in-out property <string> query;
 
     callback slot-activated(string);
+    callback app-activated(string);
+    callback open-store();
     callback query-changed(string);
     callback query-submitted();
     callback close-overlays();
@@ -45,8 +53,13 @@ export component MainWindow inherits Window {
 
     property <bool> expanded: root.width >= 840px;
     property <length> drawer-w: root.expanded ? 320px : 280px;
+    property <length> rail-w: 76px;
+    // Rails show on phone/foldable widths and vanish while an app is open.
+    property <bool> rails-visible: !root.expanded && !root.app-open;
     property <bool> left-visible: root.expanded || root.left-open;
     property <bool> right-visible: root.expanded || root.right-open;
+    // Any full-screen overlay hides the panels underneath.
+    property <bool> overlay-open: root.monitor-open || root.store-open || root.apps-open;
 
     init => {
         Responsive.window-width = root.width;
@@ -70,8 +83,8 @@ export component MainWindow inherits Window {
 
     // Centre workspace.
     VerticalLayout {
-        padding-left: root.expanded ? root.drawer-w + 24px : 24px;
-        padding-right: root.expanded ? root.drawer-w + 24px : 24px;
+        padding-left: root.app-open ? 24px : (root.expanded ? root.drawer-w + 24px : (root.rails-visible ? root.rail-w + 16px : 24px));
+        padding-right: root.app-open ? 24px : (root.expanded ? root.drawer-w + 24px : (root.rails-visible ? root.rail-w + 16px : 24px));
         padding-top: 40px;
         padding-bottom: 20px;
         spacing: 16px;
@@ -122,14 +135,65 @@ export component MainWindow inherits Window {
             }
         }
 
-        // Panel A: bottom dock, resting thumb zone.
-        HorizontalLayout {
+        // Panel A: bottom dock, resting thumb zone. Vanishes while an app
+        // is open so the module gets the full screen.
+        if !root.app-open: HorizontalLayout {
             height: 64px;
             spacing: 8px;
             for slot in root.panel-a: SlotButton {
-                tag: slot.tag;
+                icon: slot.icon;
                 label: slot.label;
+                placeholder: slot.placeholder;
                 activated => { root.slot-activated(slot.id); }
+                open-store => { root.open-store(); }
+            }
+        }
+    }
+
+    // Left rail: always-visible app holders on phone widths.
+    if root.rails-visible: Rectangle {
+        x: 0px;
+        width: root.rail-w;
+        height: root.height;
+        background: ThemePalette.canvas-bg;
+        border-color: ThemePalette.surface-border;
+        border-width: ThemePalette.border-width;
+
+        VerticalLayout {
+            padding: 8px;
+            padding-top: 96px;
+            spacing: 6px;
+            alignment: start;
+            for slot in root.panel-b: RailTile {
+                icon: slot.icon;
+                label: slot.label;
+                placeholder: slot.placeholder;
+                activated => { root.slot-activated(slot.id); }
+                open-store => { root.open-store(); }
+            }
+        }
+    }
+
+    // Right rail: always-visible app holders on phone widths.
+    if root.rails-visible: Rectangle {
+        x: root.width - root.rail-w;
+        width: root.rail-w;
+        height: root.height;
+        background: ThemePalette.canvas-bg;
+        border-color: ThemePalette.surface-border;
+        border-width: ThemePalette.border-width;
+
+        VerticalLayout {
+            padding: 8px;
+            padding-top: 96px;
+            spacing: 6px;
+            alignment: start;
+            for slot in root.panel-c: RailTile {
+                icon: slot.icon;
+                label: slot.label;
+                placeholder: slot.placeholder;
+                activated => { root.slot-activated(slot.id); }
+                open-store => { root.open-store(); }
             }
         }
     }
@@ -150,8 +214,8 @@ export component MainWindow inherits Window {
         }
     }
 
-    // Panel B: left drawer.
-    Rectangle {
+    // Panel B: left drawer (gesture-opened; slides over the rail).
+    if !root.app-open: Rectangle {
         width: root.drawer-w;
         height: root.height;
         x: root.left-visible ? 0px : -root.drawer-w;
@@ -164,23 +228,19 @@ export component MainWindow inherits Window {
             padding: 16px;
             padding-top: 48px;
             spacing: 8px;
-            Text {
-                text: "PANEL B · PASSIVE";
-                color: ThemePalette.text-secondary;
-                font-family: ThemePalette.font-family;
-                font-size: 11px;
-            }
             for slot in root.panel-b: SlotRow {
-                tag: slot.tag;
+                icon: slot.icon;
                 label: slot.label;
+                placeholder: slot.placeholder;
                 activated => { root.slot-activated(slot.id); }
+                open-store => { root.open-store(); }
             }
             Rectangle { vertical-stretch: 1; }
         }
     }
 
-    // Panel C: right drawer.
-    Rectangle {
+    // Panel C: right drawer (gesture-opened; slides over the rail).
+    if !root.app-open: Rectangle {
         width: root.drawer-w;
         height: root.height;
         x: root.right-visible ? root.width - root.drawer-w : root.width;
@@ -193,18 +253,64 @@ export component MainWindow inherits Window {
             padding: 16px;
             padding-top: 48px;
             spacing: 8px;
+            for slot in root.panel-c: SlotRow {
+                icon: slot.icon;
+                label: slot.label;
+                placeholder: slot.placeholder;
+                activated => { root.slot-activated(slot.id); }
+                open-store => { root.open-store(); }
+            }
+            Rectangle { vertical-stretch: 1; }
+        }
+    }
+
+    // All Apps overlay (the A3 builtin slot): every installed app as a
+    // tappable row with its monogram, plus a Store row. Replaces the old
+    // non-interactive text listing.
+    if root.apps-open: Rectangle {
+        background: ThemePalette.canvas-bg;
+
+        // Swallow input so nothing underneath is triggered.
+        TouchArea { }
+
+        VerticalLayout {
+            padding: 24px;
+            padding-top: 48px;
+            spacing: 12px;
+
             Text {
-                text: "PANEL C · UTILITIES";
+                text: "ALL APPS";
                 color: ThemePalette.text-secondary;
                 font-family: ThemePalette.font-family;
                 font-size: 11px;
             }
-            for slot in root.panel-c: SlotRow {
-                tag: slot.tag;
-                label: slot.label;
-                activated => { root.slot-activated(slot.id); }
+
+            if root.app-rows.length == 0: Text {
+                text: "No apps installed yet.\nOpen the Store to install your first module.";
+                color: ThemePalette.text-secondary;
+                font-family: ThemePalette.font-family;
+                font-size: 14px;
+                wrap: word-wrap;
             }
-            Rectangle { vertical-stretch: 1; }
+
+            Flickable {
+                vertical-stretch: 1;
+                VerticalLayout {
+                    spacing: 8px;
+                    for row in root.app-rows: SlotRow {
+                        icon: row.icon;
+                        label: row.label;
+                        placeholder: row.placeholder;
+                        activated => { root.app-activated(row.id); }
+                        open-store => { root.open-store(); }
+                    }
+                }
+            }
+
+            ActionButton {
+                text: "CLOSE";
+                clicked => { root.close-overlays(); }
+            }
         }
     }
 

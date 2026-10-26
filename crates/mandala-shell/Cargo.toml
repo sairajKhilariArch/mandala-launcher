@@ -56,7 +56,7 @@ theme = "@android:style/Theme.NoTitleBar.Fullscreen"
 name = "android.app.NativeActivity"
 exported = true
 launch_mode = "singleTask"
-orientation = "portrait"
+orientation = "fullSensor"
 config_changes = "orientation|screenSize|screenLayout|keyboardHidden|uiMode|density"
 
 [[package.metadata.android.application.activity.meta_data]]

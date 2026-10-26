@@ -84,6 +84,12 @@ pub struct AppState {
     /// install result (failures are prefixed with `! `).
     pub store_status: String,
     pub theme_id: String,
+    /// Module ids currently on disk (seeded at boot, refreshed after store
+    /// installs). The panels compose from this — they are app holders, not a
+    /// permanent app list.
+    pub installed: Vec<String>,
+    /// The All Apps overlay (the A3 builtin slot) is open.
+    pub apps_open: bool,
 }
 
 impl Default for AppState {
@@ -101,6 +107,8 @@ impl Default for AppState {
             store_rows: Vec::new(),
             store_status: String::new(),
             theme_id: String::new(),
+            installed: Vec::new(),
+            apps_open: false,
         }
     }
 }
@@ -115,6 +123,8 @@ pub enum Action {
     QueryChanged(String),
     QuerySubmitted,
     CloseOverlays,
+    /// The set of installed module ids changed (boot scan / store install).
+    InstalledChanged(Vec<String>),
     /// A module answered a request.
     ModuleReply {
         module: String,
@@ -211,6 +221,7 @@ pub fn reduce(state: &mut AppState, action: Action) -> Vec<Effect> {
                 state.left_open = false;
                 state.right_open = false;
                 state.monitor_open = false;
+                state.apps_open = false;
                 state.canvas_text = HOME_HINT.to_string();
             }
             Gesture::DoubleSwipeUp | Gesture::HoldBottom => {
@@ -225,16 +236,39 @@ pub fn reduce(state: &mut AppState, action: Action) -> Vec<Effect> {
             state.right_open = false;
             state.monitor_open = false;
             state.store_open = false;
+            state.apps_open = false;
+        }
+
+        Action::InstalledChanged(ids) => {
+            state.installed = ids;
         }
 
         Action::OpenSlot(id) => {
             state.left_open = false;
             state.right_open = false;
+            // One surface at a time: tapping an app row in the All Apps
+            // overlay closes it (the builtin branch re-opens it below).
+            state.apps_open = false;
             match slots::by_id(&id) {
-                None => state.canvas_text = format!("Unknown slot `{id}`"),
+                None => {
+                    // Modules outside the static matrix (apps added later)
+                    // still launch when installed and tapped from All Apps.
+                    if state.installed.iter().any(|i| i == &id) {
+                        let label = slots::label_for(&id);
+                        state.active_module = Some(id.clone());
+                        state.canvas_text = format!("Opening {label}...");
+                        fx.push(Effect::CallModule {
+                            module: id.clone(),
+                            action: "launch".into(),
+                            payload: String::new(),
+                        });
+                    } else {
+                        state.canvas_text = format!("Unknown slot `{id}`");
+                    }
+                }
                 Some(slot) if slot.kind == SlotKind::BuiltinAllApps => {
                     state.active_module = None;
-                    state.canvas_text = describe_all_apps("");
+                    state.apps_open = true;
                 }
                 Some(slot) => {
                     state.active_module = Some(slot.id.to_string());
@@ -439,6 +473,7 @@ pub fn reduce(state: &mut AppState, action: Action) -> Vec<Effect> {
             // One full-screen overlay at a time: the monitor closes, the
             // store opens, and the fetch runs off-thread via the effect.
             state.monitor_open = false;
+            state.apps_open = false;
             state.store_open = true;
             state.store_status = "loading catalog…".into();
             fx.push(Effect::FetchCatalog);
@@ -484,19 +519,18 @@ pub fn reduce(state: &mut AppState, action: Action) -> Vec<Effect> {
 /// a host feature, not a slot, so it is spliced in alongside the matrix.
 pub fn describe_all_apps(query: &str) -> String {
     let q = query.trim();
+    // Labels only — `A2  `-style tags were explicitly rejected as
+    // user-facing text (they stay internal for fuzzy search).
     let mut rows: Vec<String> = if q.is_empty() {
-        SLOTS
-            .iter()
-            .map(|s| format!("{}  {}", s.tag(), s.label))
-            .collect()
+        SLOTS.iter().map(|s| s.label.to_string()).collect()
     } else {
         search_slots(q, 8)
             .iter()
-            .map(|s| format!("{}  {}", s.tag(), s.label))
+            .map(|s| s.label.to_string())
             .collect()
     };
     if q.is_empty() || fuzzy_score(q, "Store").is_some() {
-        rows.insert(0, "S  Store".into());
+        rows.insert(0, "Store".into());
     }
     if rows.is_empty() {
         format!("No app matches `{q}`.")
@@ -584,16 +618,109 @@ mod tests {
         let mut s = st();
         let fx = reduce(&mut s, Action::OpenSlot("app-drawer".into()));
         assert!(fx.is_empty());
-        assert!(s.canvas_text.contains("A1  Terminal") && s.canvas_text.contains("C5  Camera"));
+        // The builtin opens the tappable All Apps overlay, not canvas text.
+        assert!(s.apps_open);
+        assert_eq!(s.active_module, None);
     }
 
     #[test]
     fn typing_filters_apps_live() {
         let mut s = st();
         reduce(&mut s, Action::QueryChanged("calc".into()));
-        assert!(s.canvas_text.starts_with("C4  Calculator"));
+        assert!(s.canvas_text.starts_with("Calculator"));
         reduce(&mut s, Action::QueryChanged("".into()));
         assert_eq!(s.canvas_text, HOME_HINT);
+    }
+
+    #[test]
+    fn apps_overlay_clears_on_close_and_home() {
+        let mut s = st();
+        reduce(&mut s, Action::OpenSlot("app-drawer".into()));
+        assert!(s.apps_open);
+        reduce(&mut s, Action::CloseOverlays);
+        assert!(!s.apps_open);
+
+        reduce(&mut s, Action::OpenSlot("app-drawer".into()));
+        assert!(s.apps_open);
+        reduce(&mut s, Action::Gesture(Gesture::SwipeUp));
+        assert!(!s.apps_open);
+    }
+
+    #[test]
+    fn overflow_module_launches_when_installed() {
+        let mut s = st();
+        reduce(&mut s, Action::InstalledChanged(vec!["app-zzz".into()]));
+        let fx = reduce(&mut s, Action::OpenSlot("app-zzz".into()));
+        assert_eq!(
+            fx,
+            vec![Effect::CallModule {
+                module: "app-zzz".into(),
+                action: "launch".into(),
+                payload: String::new()
+            }]
+        );
+        assert_eq!(s.active_module.as_deref(), Some("app-zzz"));
+        assert_eq!(s.canvas_text, "Opening Zzz...");
+        // Unknown *and* uninstalled still reports the miss.
+        let mut s = st();
+        reduce(&mut s, Action::OpenSlot("app-nope".into()));
+        assert_eq!(s.canvas_text, "Unknown slot `app-nope`");
+    }
+
+    #[test]
+    fn tapping_app_row_closes_overlay_but_builtin_reopens_it() {
+        let mut s = st();
+        reduce(&mut s, Action::OpenSlot("app-drawer".into()));
+        assert!(s.apps_open);
+        reduce(&mut s, Action::OpenSlot("app-notes".into()));
+        assert!(!s.apps_open, "launching must close the All Apps overlay");
+        reduce(&mut s, Action::OpenSlot("app-drawer".into()));
+        assert!(s.apps_open);
+        reduce(&mut s, Action::StoreOpen);
+        assert!(!s.apps_open, "store must replace the All Apps overlay");
+    }
+
+    #[test]
+    fn installed_changed_replaces_the_list() {
+        let mut s = st();
+        assert!(s.installed.is_empty());
+        reduce(
+            &mut s,
+            Action::InstalledChanged(vec!["app-notes".into(), "app-zzz".into()]),
+        );
+        assert_eq!(s.installed, vec!["app-notes", "app-zzz"]);
+        reduce(&mut s, Action::InstalledChanged(vec![]));
+        assert!(s.installed.is_empty());
+    }
+
+    #[test]
+    fn module_replies_render_even_with_panels_composed() {
+        // Regression guard for "app opens": an installed module's launch
+        // reply must land on the canvas, and stale replies are still dropped.
+        let mut s = st();
+        reduce(&mut s, Action::InstalledChanged(vec!["app-notes".into()]));
+        reduce(&mut s, Action::OpenSlot("app-notes".into()));
+        reduce(
+            &mut s,
+            Action::ModuleReply {
+                module: "app-notes".into(),
+                ok: true,
+                text: "opened 0 notes".into(),
+            },
+        );
+        assert_eq!(s.canvas_text, "opened 0 notes");
+        reduce(
+            &mut s,
+            Action::ModuleReply {
+                module: "app-rss".into(),
+                ok: true,
+                text: "stale".into(),
+            },
+        );
+        assert_eq!(
+            s.canvas_text, "opened 0 notes",
+            "stale reply must be dropped"
+        );
     }
 
     #[test]
@@ -967,11 +1094,13 @@ mod tests {
     }
 
     #[test]
-    fn all_apps_lists_the_store() {
+    fn all_apps_lists_the_store_without_tags() {
         let listing = describe_all_apps("");
-        assert!(listing.starts_with("S  Store"), "{listing}");
-        assert!(listing.contains("A1  Terminal") && listing.contains("C5  Camera"));
-        assert!(describe_all_apps("store").contains("S  Store"));
-        assert!(!describe_all_apps("zzzqqq").contains("S  Store"));
+        assert!(listing.starts_with("Store"), "{listing}");
+        // Labels only — no `A1  `-style tags in user-facing text.
+        assert!(listing.contains("Terminal") && listing.contains("Camera"));
+        assert!(!listing.contains("A1") && !listing.contains("C5"));
+        assert!(describe_all_apps("store").contains("Store"));
+        assert!(!describe_all_apps("zzzqqq").contains("Store"));
     }
 }

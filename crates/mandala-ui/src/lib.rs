@@ -3,7 +3,7 @@
 
 slint::include_modules!();
 
-use mandala_core::slots::{self, Panel};
+use mandala_core::slots::{self, Panel, PanelSlot};
 use mandala_core::state::AppState;
 use mandala_core::theme::{ResolvedTheme, Rgba};
 use slint::{Color, ModelRc, SharedString, VecModel};
@@ -12,22 +12,55 @@ fn color(c: Rgba) -> Color {
     Color::from_argb_u8(c.a, c.r, c.g, c.b)
 }
 
-fn slot_model(panel: Panel) -> ModelRc<SlotItem> {
-    let items: Vec<SlotItem> = slots::by_panel(panel)
+fn slot_items(composed: &[PanelSlot]) -> Vec<SlotItem> {
+    composed
+        .iter()
         .map(|s| SlotItem {
-            id: s.id.into(),
-            tag: s.tag().into(),
-            label: s.label.into(),
+            id: s.id.as_str().into(),
+            label: s.label.as_str().into(),
+            icon: slots::glyph_for(&s.label).as_str().into(),
+            placeholder: s.placeholder,
         })
-        .collect();
-    ModelRc::new(VecModel::from(items))
+        .collect()
 }
 
-/// Fill the three panel models from the static slot matrix. Call once.
-pub fn populate_slots(ui: &MainWindow) {
-    ui.set_panel_a(slot_model(Panel::A));
-    ui.set_panel_b(slot_model(Panel::B));
-    ui.set_panel_c(slot_model(Panel::C));
+/// Fill the three panel models from the composed holder slots. Call once at
+/// boot (before the first scan the panels are placeholders) and again after
+/// `installed` changes.
+pub fn populate_slots(ui: &MainWindow, installed: &[String]) {
+    ui.set_panel_a(ModelRc::new(VecModel::from(slot_items(
+        &slots::compose_panel(Panel::A, installed),
+    ))));
+    ui.set_panel_b(ModelRc::new(VecModel::from(slot_items(
+        &slots::compose_panel(Panel::B, installed),
+    ))));
+    ui.set_panel_c(ModelRc::new(VecModel::from(slot_items(
+        &slots::compose_panel(Panel::C, installed),
+    ))));
+}
+
+/// Rows of the All Apps overlay: the Store entry first, then every installed
+/// module sorted by label (known ids get matrix labels, unknown ids are
+/// humanized by the core).
+fn app_rows(installed: &[String]) -> Vec<SlotItem> {
+    let mut rows: Vec<SlotItem> = vec![SlotItem {
+        id: "store".into(),
+        label: "Store".into(),
+        icon: "S".into(),
+        placeholder: false,
+    }];
+    let mut mods: Vec<(String, String)> = installed
+        .iter()
+        .map(|id| (slots::label_for(id), id.clone()))
+        .collect();
+    mods.sort_by(|a, b| a.0.to_lowercase().cmp(&b.0.to_lowercase()));
+    rows.extend(mods.into_iter().map(|(label, id)| SlotItem {
+        icon: slots::glyph_for(&label).as_str().into(),
+        id: id.as_str().into(),
+        label: label.as_str().into(),
+        placeholder: false,
+    }));
+    rows
 }
 
 /// Push the reducer state into the window. Must run on the UI thread.
@@ -38,6 +71,9 @@ pub fn render(ui: &MainWindow, st: &AppState) {
     ui.set_right_open(st.right_open);
     ui.set_monitor_open(st.monitor_open);
     ui.set_store_open(st.store_open);
+    // A module is active: every panel vanishes until the home gesture.
+    ui.set_app_open(st.active_module.is_some());
+    ui.set_apps_open(st.apps_open);
     ui.set_store_status(SharedString::from(st.store_status.as_str()));
     let rows: Vec<StoreItem> = st
         .store_rows
@@ -52,6 +88,12 @@ pub fn render(ui: &MainWindow, st: &AppState) {
         })
         .collect();
     ui.set_store_rows(ModelRc::new(VecModel::from(rows)));
+    if st.apps_open {
+        ui.set_app_rows(ModelRc::new(VecModel::from(app_rows(&st.installed))));
+    }
+    // Panels are app holders: recompose when the installed set changed (boot
+    // scan, store install). Cheap (15 composed slots).
+    populate_slots(ui, &st.installed);
     // Only touch the input when the state diverged (e.g. cleared on submit);
     // rewriting identical text would disturb the cursor while typing.
     if ui.get_query().as_str() != st.query {

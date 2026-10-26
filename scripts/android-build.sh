@@ -81,7 +81,7 @@ cargo build $FLAG -p mandala-sign
 REL="target/$PROFILE"
 OUTLIB="target/$TARGET/$PROFILE"
 rm -rf "$OUT"
-mkdir -p "$OUT/jniLibs/$ABI" "$OUT/mandala-home/trust" "$OUT/mandala-home/themes"
+mkdir -p "$OUT/jniLibs/$ABI" "$OUT/mandala-home/trust" "$OUT/mandala-home/themes" "$OUT/themes"
 cp android/AndroidManifest.xml "$OUT/"
 # FileProvider paths for the C5 capture intent (needs androidx.core on the
 # Gradle classpath; without it the command reports the missing provider).
