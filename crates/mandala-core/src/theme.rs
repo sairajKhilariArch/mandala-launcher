@@ -53,6 +53,11 @@ pub struct ThemeTokens {
     /// trending orange so older user themes stay valid.
     #[serde(default = "default_cta")]
     pub cta_accent: String,
+    /// Label colour on primary (CTA) buttons. Absent = the theme's own
+    /// canvas colour (the historical behaviour), overridden per theme when
+    /// that would fail WCAG AA against the CTA fill.
+    #[serde(default)]
+    pub on_cta: Option<String>,
     #[serde(default)]
     pub border_width_px: f32,
     #[serde(default = "default_radius")]
@@ -130,6 +135,8 @@ pub struct ResolvedTheme {
     pub text_secondary: Rgba,
     pub accent_focus: Rgba,
     pub cta_accent: Rgba,
+    /// Resolved: explicit `on_cta` token, else `canvas_bg` (see ThemeTokens).
+    pub on_cta: Rgba,
     pub border_width_px: f32,
     pub corner_radius_px: f32,
     pub font_family: String,
@@ -155,16 +162,21 @@ impl ThemeManifest {
                 "corner_radius_px must be within 0..=64".into(),
             ));
         }
+        let canvas_bg = Rgba::parse(&t.canvas_bg)?;
         Ok(ResolvedTheme {
             id: self.theme_id.clone(),
             name: self.theme_name.clone(),
-            canvas_bg: Rgba::parse(&t.canvas_bg)?,
+            canvas_bg,
             surface_primary: Rgba::parse(&t.surface_primary)?,
             surface_border: Rgba::parse(&t.surface_border)?,
             text_primary: Rgba::parse(&t.text_primary)?,
             text_secondary: Rgba::parse(&t.text_secondary)?,
             accent_focus: Rgba::parse(&t.accent_focus)?,
             cta_accent: Rgba::parse(&t.cta_accent)?,
+            on_cta: match &t.on_cta {
+                Some(s) => Rgba::parse(s)?,
+                None => canvas_bg,
+            },
             border_width_px: t.border_width_px,
             corner_radius_px: t.corner_radius_px,
             font_family: t.font_family.clone(),
@@ -554,6 +566,100 @@ mod tests {
                 "{overlay} has no builtin theme"
             );
         }
+    }
+
+    /// WCAG 2.1 relative luminance of an sRGB colour.
+    fn luminance(c: Rgba) -> f64 {
+        let lin = |v: u8| {
+            let s = v as f64 / 255.0;
+            if s <= 0.04045 {
+                s / 12.92
+            } else {
+                ((s + 0.055) / 1.055).powf(2.4)
+            }
+        };
+        0.2126 * lin(c.r) + 0.7152 * lin(c.g) + 0.0722 * lin(c.b)
+    }
+
+    /// WCAG 2.1 contrast ratio (1..=21) between two opaque colours.
+    fn contrast(a: Rgba, b: Rgba) -> f64 {
+        let (l1, l2) = (luminance(a), luminance(b));
+        let (hi, lo) = if l1 > l2 { (l1, l2) } else { (l2, l1) };
+        (hi + 0.05) / (lo + 0.05)
+    }
+
+    /// Every builtin manifest must keep body text readable where the UI
+    /// actually renders it: text on the canvas, text on the primary surface,
+    /// and the label on a primary (CTA) button. 4.5:1 is the WCAG AA floor
+    /// for normal text; this locks future theme edits to it.
+    #[test]
+    fn builtin_themes_meet_body_contrast() {
+        const MIN: f64 = 4.5;
+        let all = [
+            PRESET_AURORA,
+            PRESET_OLED,
+            PRESET_CEL,
+            PRESET_RETRO,
+            APP_PRESET_TERMINAL,
+            APP_PRESET_CAMERA,
+            APP_PRESET_NOTES,
+            APP_PRESET_CHAT,
+            APP_PRESET_VAULT,
+            APP_PRESET_STORE,
+            APP_PRESET_AI,
+            APP_PRESET_WEATHER,
+            APP_PRESET_RSS,
+            APP_PRESET_TASKS,
+            APP_PRESET_READER,
+            APP_PRESET_GALLERY,
+            APP_PRESET_AEGIS,
+            APP_PRESET_LOCALSEND,
+            APP_PRESET_CALCULATOR,
+            APP_PRESET_DRAWER,
+            APP_PRESET_MONITOR,
+        ];
+        let mut failures = Vec::new();
+        for json in all {
+            let t = ThemeManifest::from_json(json)
+                .and_then(|m| m.resolve())
+                .expect("builtin theme must resolve");
+            let pairs = [
+                ("text_primary/canvas", t.text_primary, t.canvas_bg),
+                ("text_primary/surface", t.text_primary, t.surface_primary),
+                ("text_secondary/canvas", t.text_secondary, t.canvas_bg),
+                (
+                    "text_secondary/surface",
+                    t.text_secondary,
+                    t.surface_primary,
+                ),
+                // ActionButton: the theme's on-cta label on the CTA fill.
+                ("cta label/cta", t.on_cta, t.cta_accent),
+            ];
+            for (what, fg, bg) in pairs {
+                let r = contrast(fg, bg);
+                if r < MIN {
+                    failures.push(format!("{} {what}: {r:.2}:1", t.id));
+                }
+            }
+        }
+        assert!(
+            failures.is_empty(),
+            "theme contrast below {MIN}:1:\n{}",
+            failures.join("\n")
+        );
+    }
+
+    #[test]
+    fn contrast_ratio_math() {
+        // Known WCAG values: black on white is 21:1, same colour is 1:1.
+        let black = Rgba::parse("#000000").unwrap();
+        let white = Rgba::parse("#FFFFFF").unwrap();
+        assert!((contrast(black, white) - 21.0).abs() < 1e-9);
+        assert!((contrast(white, white) - 1.0).abs() < 1e-9);
+        // #767676 is the classic lightest-grey passing 4.5:1 on white.
+        let grey = Rgba::parse("#767676").unwrap();
+        assert!(contrast(grey, white) >= 4.5);
+        assert!(contrast(Rgba::parse("#777777").unwrap(), white) < 4.5);
     }
 
     #[test]

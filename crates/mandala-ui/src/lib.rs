@@ -143,6 +143,7 @@ pub fn apply_theme(ui: &MainWindow, t: &ResolvedTheme) {
     p.set_text_secondary(color(t.text_secondary));
     p.set_accent_focus(color(t.accent_focus));
     p.set_cta_accent(color(t.cta_accent));
+    p.set_on_cta(color(t.on_cta));
     p.set_border_width(t.border_width_px);
     p.set_corner_radius(t.corner_radius_px);
     p.set_font_family(SharedString::from(t.font_family.as_str()));

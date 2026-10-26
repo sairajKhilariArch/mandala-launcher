@@ -1,4 +1,9 @@
-import { ThemePalette } from "theme_tokens.slint";
+import { ThemePalette, Scale } from "theme_tokens.slint";
+
+// shortcut: buttons are pointer/touch-driven — no per-control keyboard tab
+// focus. The command bar is the keyboard path (fuzzy-launch any app from it)
+// and Escape/back dismisses every overlay; upgrade to a focus loop if desktop
+// keyboard navigation of individual controls is ever needed.
 
 // One rendered panel position or All-Apps row: an app (id set) or an empty
 // holder (placeholder). `icon` is a monogram glyph computed in Rust — no
@@ -36,7 +41,7 @@ export component SlotButton inherits Rectangle {
     callback activated();
     callback open-store();
 
-    background: touch.pressed ? ThemePalette.surface-border : ThemePalette.surface-primary;
+    background: (touch.pressed || (touch.has-hover && !root.placeholder)) ? ThemePalette.surface-border : ThemePalette.surface-primary;
     border-radius: ThemePalette.corner-radius;
     border-width: ThemePalette.border-width;
     border-color: placeholder ? ThemePalette.canvas-bg : ThemePalette.surface-border;
@@ -44,8 +49,8 @@ export component SlotButton inherits Rectangle {
 
     VerticalLayout {
         alignment: center;
-        padding: 4px;
-        spacing: 2px;
+        padding: Scale.space-1;
+        spacing: Scale.space-half;
 
         // Monogram icon tile.
         Rectangle {
@@ -53,7 +58,7 @@ export component SlotButton inherits Rectangle {
             width: 28px;
             x: (parent.width - self.width) / 2;
             background: ThemePalette.canvas-bg;
-            border-radius: 4px;
+            border-radius: ThemePalette.corner-radius;
             border-width: ThemePalette.border-width;
             border-color: ThemePalette.surface-border;
 
@@ -61,7 +66,7 @@ export component SlotButton inherits Rectangle {
                 text: root.placeholder ? "+" : root.icon;
                 color: root.placeholder ? ThemePalette.text-secondary : root.accent;
                 font-family: ThemePalette.font-family;
-                font-size: 14px;
+                font-size: Scale.font-icon;
                 horizontal-alignment: center;
                 vertical-alignment: center;
             }
@@ -71,13 +76,14 @@ export component SlotButton inherits Rectangle {
             text: root.placeholder ? "" : root.label;
             color: ThemePalette.text-primary;
             font-family: ThemePalette.font-family;
-            font-size: 10px;
+            font-size: Scale.font-label;
             horizontal-alignment: center;
             wrap: word-wrap;
         }
     }
 
     touch := TouchArea {
+
         clicked => {
             if (root.placeholder) {
                 root.open-store();
@@ -99,7 +105,7 @@ export component RailTile inherits Rectangle {
     callback open-store();
 
     height: 56px;
-    background: ta.pressed ? ThemePalette.surface-border : ThemePalette.canvas-bg;
+    background: (ta.pressed || (ta.has-hover && !root.placeholder)) ? ThemePalette.surface-border : ThemePalette.canvas-bg;
     border-radius: ThemePalette.corner-radius;
     border-width: ThemePalette.border-width;
     border-color: ThemePalette.surface-border;
@@ -111,13 +117,13 @@ export component RailTile inherits Rectangle {
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
         background: ThemePalette.surface-primary;
-        border-radius: 4px;
+        border-radius: ThemePalette.corner-radius;
 
         Text {
             text: root.placeholder ? "+" : root.icon;
             color: root.placeholder ? ThemePalette.text-secondary : root.accent;
             font-family: ThemePalette.font-family;
-            font-size: 15px;
+            font-size: Scale.font-icon;
             horizontal-alignment: center;
             vertical-alignment: center;
         }
@@ -145,28 +151,28 @@ export component SlotRow inherits Rectangle {
     callback open-store();
 
     height: 52px;
-    background: touch.pressed ? ThemePalette.surface-border : ThemePalette.canvas-bg;
+    background: (touch.pressed || (touch.has-hover && !root.placeholder)) ? ThemePalette.surface-border : ThemePalette.canvas-bg;
     border-radius: ThemePalette.corner-radius;
     border-width: ThemePalette.border-width;
     border-color: ThemePalette.surface-border;
     opacity: placeholder ? 0.45 : 1.0;
 
     HorizontalLayout {
-        padding-left: 12px;
-        padding-right: 12px;
-        spacing: 12px;
+        padding-left: Scale.space-3;
+        padding-right: Scale.space-3;
+        spacing: Scale.space-3;
 
         Rectangle {
             width: 32px;
             height: 32px;
             background: ThemePalette.surface-primary;
-            border-radius: 4px;
+            border-radius: ThemePalette.corner-radius;
 
             Text {
                 text: root.placeholder ? "+" : root.icon;
                 color: root.placeholder ? ThemePalette.text-secondary : root.accent;
                 font-family: ThemePalette.font-family;
-                font-size: 14px;
+                font-size: Scale.font-icon;
                 horizontal-alignment: center;
                 vertical-alignment: center;
             }
@@ -176,7 +182,7 @@ export component SlotRow inherits Rectangle {
             text: root.placeholder ? "add from store" : root.label;
             color: root.placeholder ? ThemePalette.text-secondary : ThemePalette.text-primary;
             font-family: ThemePalette.font-family;
-            font-size: 15px;
+            font-size: Scale.font-body;
             vertical-alignment: center;
             horizontal-stretch: 1;
             overflow: elide;
@@ -200,17 +206,17 @@ export component ActionButton inherits Rectangle {
     in property <bool> primary: false;
     callback clicked();
 
-    height: 48px;
-    background: touch.pressed ? ThemePalette.surface-border : (root.primary ? ThemePalette.cta-accent : ThemePalette.surface-primary);
+    height: Scale.control-height;
+    background: touch.pressed ? ThemePalette.surface-border : (root.primary ? ThemePalette.cta-accent : (touch.has-hover ? ThemePalette.surface-border : ThemePalette.surface-primary));
     border-radius: ThemePalette.corner-radius;
     border-width: ThemePalette.border-width;
     border-color: ThemePalette.surface-border;
 
     Text {
         text: root.text;
-        color: root.primary ? ThemePalette.canvas-bg : ThemePalette.text-primary;
+        color: root.primary ? ThemePalette.on-cta : ThemePalette.text-primary;
         font-family: ThemePalette.font-family;
-        font-size: 12px;
+        font-size: Scale.font-small;
         horizontal-alignment: center;
         vertical-alignment: center;
     }

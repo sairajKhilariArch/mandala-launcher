@@ -11,9 +11,49 @@ export global ThemePalette {
     // Primary-action buttons (install, exit). Overwritten from the theme
     // manifest; themes without the token fall back to this.
     in-out property <color> cta-accent: #F97316;
+    // Label on a primary (CTA) button. Themes override it when canvas-bg
+    // would not pass WCAG AA against their CTA fill; the default keeps the
+    // historical canvas-bg behaviour.
+    in-out property <color> on-cta: canvas-bg;
+    // Scrim behind modal overlays and open drawers. Not a manifest token:
+    // a dimming scrim must stay dark over any theme's content.
+    in-out property <color> overlay-scrim: #00000099;
     in-out property <length> border-width: 0px;
     in-out property <length> corner-radius: 4px;
     in-out property <string> font-family: "Inter";
+}
+
+// Design-system scale: the one place sizes are declared. No literal
+// font-size, spacing or font-family past this block (see
+// docs/design-system.md). Static — themes do not rescale geometry.
+export global Scale {
+    // Type ramp.
+    out property <length> font-label: 10px;   // slot labels under monograms
+    out property <length> font-caption: 11px; // overlay headings, meta lines
+    out property <length> font-small: 12px;   // buttons, status, monitor
+    out property <length> font-icon: 14px;    // monogram glyphs (one size)
+    out property <length> font-body: 15px;    // canvas, rows, placeholder
+    out property <length> font-input: 16px;   // command input
+    out property <string> font-mono: "monospace"; // process monitor (material)
+
+    // Spacing ramp (4/8 rhythm; `space-half` is the micro-gap in tiles).
+    out property <length> space-half: 2px;
+    out property <length> space-1: 4px;
+    out property <length> space-2: 8px;
+    out property <length> space-3: 12px;
+    out property <length> space-4: 16px;
+    out property <length> space-5: 20px;
+    out property <length> space-6: 24px;
+    out property <length> space-8: 32px;
+    out property <length> space-10: 40px;
+
+    // Controls: one height for every input/button band (>= 44px touch floor).
+    out property <length> control-height: 48px;
+    out property <length> touch-min: 44px;
+
+    // Edge gutters clearing system chrome (status bar).
+    out property <length> gutter-top: 48px;
+    out property <length> gutter-rail-top: 96px;
 }
 
 // Width-class breakpoints for phones, foldables and tri-fold / large panels.

@@ -10,6 +10,7 @@
     "text_primary": "#111111",
     "text_secondary": "#5A5248",
     "accent_focus": "#FF6B6B",
+    "on_cta": "#111111",
     "border_width_px": 2,
     "corner_radius_px": 14,
     "font_family": "Inter"

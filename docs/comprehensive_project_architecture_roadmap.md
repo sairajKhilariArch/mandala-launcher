@@ -461,6 +461,14 @@ export component ScreenScaleEngine {
 - [x] Implement Android system overlay and wallpaper permissions via JNI. (`shell/src/android.rs`; needs a device smoke test)
 - [x] Conduct performance profiling of cold boot and RAM footprint. (`tools/mandala-perf`, shell boot log; see `docs/performance.md` — the 20 ms / 5 MB targets are design goals the GUI stack does not meet)
 
+### Phase 6: Design System & Adaptive UI
+- [x] Single token block for type, spacing and controls (`Scale` global in `ui/theme_tokens.slint`); no literal font-size/spacing/colour past it.
+- [x] Semantic colour roles completed with an optional `on_cta` token (CTA label), defaulted to the historical `canvas_bg` so old manifests render unchanged.
+- [x] Component states: instant press + desktop hover feedback on every control, focus ring on the input, ≥44px touch targets, no layout shift.
+- [x] WCAG AA enforcement: contrast tests over all 21 builtin manifests (`builtin_themes_meet_body_contrast`) with a verified formula test.
+- [x] Responsive classes (compact/medium/expanded) verified for phone, foldable, tablet and desktop widths; spec in `docs/design-system.md`.
+- [x] Design-system reference documented: colour roles, type ramp, spacing ramp, states, accessibility, responsive rules. (`docs/design-system.md`)
+
 ---
 
 ## 9.1 Implementation status (evidence)
