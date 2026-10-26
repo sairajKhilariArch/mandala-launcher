@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "abi": "linux-x86_64",
+  "generated": "unix:1793005632",
+  "modules": [
+    {
+      "id": "app-notes",
+      "label": "Notes",
+      "description": "Fast local notes. `note ...` appends from the command bar; calculator results can be piped in.",
+      "version": "1.0.0",
+      "sha256": "16ab565e4b60fac90e47084a1238239e0f979c00362a6759aaebc184c8f1de91",
+      "size": 352592,
+      "url": "modules/linux-x86_64/app-notes.so",
+      "sig": "modules/linux-x86_64/app-notes.so.sig"
+    }
+  ]
+}

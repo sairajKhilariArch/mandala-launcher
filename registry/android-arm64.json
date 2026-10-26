@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "abi": "android-arm64",
+  "generated": "unix:1793005632",
+  "modules": [
+    {
+      "id": "app-notes",
+      "label": "Notes",
+      "description": "Fast local notes. `note ...` appends from the command bar; calculator results can be piped in.",
+      "version": "1.0.0",
+      "sha256": "df2d97a65d2e954ff9d49150b61d8476261b6cd9b1300d62e8be22fde1c6f490",
+      "size": 345912,
+      "url": "modules/android-arm64/app-notes.so",
+      "sig": "modules/android-arm64/app-notes.so.sig"
+    }
+  ]
+}
