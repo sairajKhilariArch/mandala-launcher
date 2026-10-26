@@ -2,12 +2,17 @@
 
 use crate::error::{MandalaError, Result};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::Path;
 
 pub const PRESET_AURORA: &str = include_str!("../../../themes/aurora-slate.json");
 pub const PRESET_OLED: &str = include_str!("../../../themes/minimalist-oled.json");
 pub const PRESET_CEL: &str = include_str!("../../../themes/cel-shaded.json");
 pub const PRESET_RETRO: &str = include_str!("../../../themes/retro-terminal.json");
+
+/// Per-app theme presets: shown while that module is the active view.
+pub const APP_PRESET_TERMINAL: &str = include_str!("../../../themes/apps/app-terminal.json");
+pub const APP_PRESET_CAMERA: &str = include_str!("../../../themes/apps/app-camera.json");
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct ThemeManifest {
@@ -151,10 +156,12 @@ impl ThemeManifest {
     }
 }
 
-/// Holds the available themes and the active one.
+/// Holds the available themes, the active one, and per-app overrides
+/// (`<home>/themes/apps/<app-id>.json`) that apply while an app is open.
 pub struct ThemeManager {
     themes: Vec<ResolvedTheme>,
     current: usize,
+    apps: HashMap<String, ResolvedTheme>,
 }
 
 impl ThemeManager {
@@ -168,7 +175,23 @@ impl ThemeManager {
                     .expect("built-in theme must be valid")
             })
             .collect();
-        Self { themes, current: 0 }
+        let apps = [
+            ("app-terminal", APP_PRESET_TERMINAL),
+            ("app-camera", APP_PRESET_CAMERA),
+        ]
+        .iter()
+        .map(|(id, j)| {
+            let t = ThemeManifest::from_json(j)
+                .and_then(|m| m.resolve())
+                .expect("built-in app theme must be valid");
+            ((*id).to_string(), t)
+        })
+        .collect();
+        Self {
+            themes,
+            current: 0,
+            apps,
+        }
     }
 
     /// Add user themes from `dir/*.json`; invalid files are skipped and
@@ -194,6 +217,41 @@ impl ThemeManager {
             }
         }
         warnings
+    }
+
+    /// Per-app themes from `dir/<app-id>.json`; the file stem is the app id.
+    /// Overrides built-in app themes. Fits the same manifest shape.
+    pub fn load_app_dir(&mut self, dir: &Path) -> Vec<String> {
+        let mut warnings = Vec::new();
+        let Ok(rd) = std::fs::read_dir(dir) else {
+            return warnings;
+        };
+        let mut paths: Vec<_> = rd.flatten().map(|e| e.path()).collect();
+        paths.sort();
+        for p in paths {
+            if p.extension().and_then(|e| e.to_str()) != Some("json") {
+                continue;
+            }
+            let Some(id) = p.file_stem().and_then(|s| s.to_str()) else {
+                continue;
+            };
+            let loaded = std::fs::read_to_string(&p)
+                .map_err(|e| MandalaError::io(&p, e))
+                .and_then(|s| ThemeManifest::from_json(&s))
+                .and_then(|m| m.resolve());
+            match loaded {
+                Ok(t) => {
+                    self.apps.insert(id.to_string(), t);
+                }
+                Err(e) => warnings.push(format!("{}: {e}", p.display())),
+            }
+        }
+        warnings
+    }
+
+    /// The theme to show while app `id` is the active view.
+    pub fn for_app(&self, id: &str) -> Option<&ResolvedTheme> {
+        self.apps.get(id)
     }
 
     pub fn add(&mut self, theme: ResolvedTheme) {
@@ -331,6 +389,47 @@ mod tests {
         m.tokens.canvas_bg = "red".into();
         assert!(m.resolve().is_err());
         assert!(ThemeManifest::from_json("{").is_err());
+    }
+
+    #[test]
+    fn app_themes_builtin_and_overridable() {
+        let m = ThemeManager::with_presets();
+        assert!(m.for_app("app-notes").is_none());
+        assert_eq!(
+            m.for_app("app-terminal").unwrap().id,
+            "app-terminal-phosphor"
+        );
+        assert_eq!(m.for_app("app-camera").unwrap().font_family, "Inter");
+
+        let dir = tempfile::tempdir().unwrap();
+        let mut custom = ThemeManifest::from_json(APP_PRESET_TERMINAL).unwrap();
+        custom.tokens.canvas_bg = "#123123".into();
+        std::fs::write(
+            dir.path().join("app-terminal.json"),
+            serde_json::to_string(&custom).unwrap(),
+        )
+        .unwrap();
+        std::fs::write(dir.path().join("app-broken.json"), "{").unwrap();
+        std::fs::write(dir.path().join("app-sketch.txt"), "ignored").unwrap();
+        let mut m = ThemeManager::with_presets();
+        let warnings = m.load_app_dir(dir.path());
+        assert_eq!(warnings.len(), 1, "exactly the bad json is reported");
+        assert!(warnings[0].contains("app-broken.json"));
+        // A user file shares the id, it replaces the preset (test id matches).
+        assert_eq!(
+            m.for_app("app-terminal").unwrap().id,
+            "app-terminal-phosphor"
+        );
+        let t = m.for_app("app-terminal").unwrap();
+        assert_eq!(
+            t.canvas_bg,
+            Rgba {
+                r: 0x12,
+                g: 0x31,
+                b: 0x23,
+                a: 255
+            }
+        );
     }
 
     #[test]

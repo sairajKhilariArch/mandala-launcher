@@ -12,13 +12,14 @@ use mandala_core::ipc_bus::{AccessControlList, MicrokernelIpcBroker};
 use mandala_core::loader::ModuleHost;
 use mandala_core::paths::HostPaths;
 use mandala_core::router::run_router;
+use mandala_core::scheduler::{spawn_runner, Scheduler};
 use mandala_core::slots;
 use mandala_core::state::Action;
 use mandala_core::theme::ThemeManager;
 use mandala_core::MandalaError;
 use mandala_ui::MainWindow;
 use slint::ComponentHandle;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 /// Trusted keys for this build: every `trust/*.pub` on disk plus the release
 /// public key compiled into the binary. A fresh install has an empty trust
@@ -92,6 +93,9 @@ fn run_inner(paths: HostPaths, exit_after_boot: bool) -> anyhow::Result<()> {
     for w in themes.load_user_dir(&paths.themes_dir()) {
         log::warn!("theme skipped: {w}");
     }
+    for w in themes.load_app_dir(&paths.app_themes_dir()) {
+        log::warn!("app theme skipped: {w}");
+    }
     let after_themes = boot.elapsed();
 
     // One worker drives the router task (it is single-threaded by design) and
@@ -109,6 +113,13 @@ fn run_inner(paths: HostPaths, exit_after_boot: bool) -> anyhow::Result<()> {
     let host = Arc::new(ModuleHost::new(paths.clone(), trust, broker.clone()));
     let after_host = boot.elapsed();
 
+    // Alarms persist across restarts; the dispatcher thread fires due ones
+    // into the broker (boot catches up on alarms that came due while off).
+    let scheduler = Arc::new(Mutex::new(Scheduler::load(
+        paths.root.join("scheduler.json"),
+    )));
+    spawn_runner(scheduler.clone(), broker.clone());
+
     let ui = MainWindow::new().context("creating window")?;
     let after_window = boot.elapsed();
     let installed = installed_module_ids(&paths);
@@ -118,6 +129,7 @@ fn run_inner(paths: HostPaths, exit_after_boot: bool) -> anyhow::Result<()> {
         broker.clone(),
         host.clone(),
         themes,
+        scheduler,
         runtime.handle().clone(),
         ui.as_weak(),
         installed,

@@ -1,0 +1,18 @@
+{
+  "theme_id": "app-camera-vivid",
+  "theme_name": "Vivid Capture",
+  "version": "1.0.0",
+  "author": "Mandala Team",
+  "tokens": {
+    "canvas_bg": "#0A0A0C",
+    "surface_primary": "#141418",
+    "surface_border": "#2A2A32",
+    "text_primary": "#F5F5F0",
+    "text_secondary": "#8A8A96",
+    "accent_focus": "#FFC93C",
+    "cta_accent": "#F59E0B",
+    "border_width_px": 0,
+    "corner_radius_px": 10,
+    "font_family": "Inter"
+  }
+}

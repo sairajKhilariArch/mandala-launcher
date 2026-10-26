@@ -2950,6 +2950,7 @@ name = "mandala-shell"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "chrono",
  "env_logger",
  "jni 0.21.1",
  "log",

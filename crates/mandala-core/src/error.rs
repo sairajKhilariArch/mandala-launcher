@@ -28,6 +28,9 @@ pub enum MandalaError {
     #[error("store error: {0}")]
     Store(String),
 
+    #[error("scheduler error: {0}")]
+    Schedule(String),
+
     #[error("I/O error on {path}: {source}")]
     Io {
         path: String,

@@ -5,6 +5,7 @@ use crate::store::Store;
 use mandala_core::gesture::{Gesture, GestureConfig, GestureTracker};
 use mandala_core::ipc_bus::{IpcEnvelope, MicrokernelIpcBroker, HOST};
 use mandala_core::loader::{format_monitor, ModuleHost};
+use mandala_core::scheduler::{now_ms, AlarmRequest, Scheduler};
 use mandala_core::slots;
 use mandala_core::state::{reduce, Action, AppState, Effect};
 use mandala_core::theme::ThemeManager;
@@ -21,9 +22,13 @@ pub struct App {
     state: Mutex<AppState>,
     gestures: Mutex<GestureTracker>,
     themes: Mutex<ThemeManager>,
+    /// The module id whose theme is currently on the window (None = home),
+    /// so the theme changes exactly when the visible context does.
+    active_theme_for: Mutex<Option<String>>,
     broker: Arc<MicrokernelIpcBroker>,
     host: Arc<ModuleHost>,
     store: Store,
+    scheduler: Arc<Mutex<Scheduler>>,
     rt: tokio::runtime::Handle,
     ui: Mutex<slint::Weak<MainWindow>>,
     started: Instant,
@@ -34,6 +39,7 @@ impl App {
         broker: Arc<MicrokernelIpcBroker>,
         host: Arc<ModuleHost>,
         themes: ThemeManager,
+        scheduler: Arc<Mutex<Scheduler>>,
         rt: tokio::runtime::Handle,
         ui: slint::Weak<MainWindow>,
         installed: Vec<String>,
@@ -49,9 +55,11 @@ impl App {
             state: Mutex::new(state),
             gestures: Mutex::new(GestureTracker::new(GestureConfig::default())),
             themes: Mutex::new(themes),
+            active_theme_for: Mutex::new(None),
             broker,
             host,
             store,
+            scheduler,
             rt,
             ui: Mutex::new(ui),
             started: Instant::now(),
@@ -66,6 +74,10 @@ impl App {
     pub fn dispatch(self: &Arc<Self>, action: Action) {
         let effects = reduce(&mut lock(&self.state), action);
         self.repaint();
+        // Theme follows the visible context: an app with its own theme gets
+        // it on open; back to home restores the selected theme.
+        let active = lock(&self.state).active_module.clone();
+        self.sync_theme(active);
         if !effects.is_empty() {
             let this = self.clone();
             // Module calls may block (file I/O, dlopen): keep them off the UI thread.
@@ -204,12 +216,158 @@ impl App {
                 #[cfg(not(target_os = "android"))]
                 let _ = slint::quit_event_loop();
             }
+            Effect::ScheduleAlarm { when, text, target } => {
+                let Some(due) = Self::due_ms_from(&when) else {
+                    self.notice(format!("alarm: bad time `{when}`"));
+                    return;
+                };
+                let req = AlarmRequest {
+                    id: format!("u-{}-{due}", now_ms()),
+                    due_ms: due,
+                    target: target.clone().unwrap_or_else(|| HOST.to_string()),
+                    action: "alarm".into(),
+                    payload: serde_json::json!({ "ok": true, "text": text }).to_string(),
+                };
+                let tomorrow = Self::due_is_tomorrow(due);
+                let via = target.map(|t| format!(" via {t}")).unwrap_or_default();
+                match lock(&self.scheduler).add(req) {
+                    Ok(()) => self.notice(format!(
+                        "alarm set: {when} {text}{via}{}",
+                        if tomorrow { " (tomorrow)" } else { "" }
+                    )),
+                    Err(e) => self.notice(format!("alarm: {e}")),
+                }
+            }
+            Effect::ListAlarms => {
+                self.notice(self.alarm_list_text());
+            }
+            Effect::CancelAlarm { index } => {
+                let id = lock(&self.scheduler)
+                    .list()
+                    .get(index)
+                    .map(|r| r.id.clone());
+                let out = match id {
+                    Some(id) => lock(&self.scheduler).cancel(&id),
+                    None => Ok(false),
+                };
+                self.notice(match out {
+                    Ok(true) => format!("alarm #{index} canceled"),
+                    Ok(false) => "alarm: nothing to cancel at that position".to_string(),
+                    Err(e) => format!("alarm: {e}"),
+                });
+            }
         }
+    }
+
+    fn notice(self: &Arc<Self>, text: impl Into<String>) {
+        self.dispatch(Action::Notice(text.into()));
+    }
+
+    /// `HH:MM` -> epoch ms of the next occurrence in the device's local zone
+    /// (today if still ahead, else tomorrow). `None` on a malformed time.
+    /// shortcut: local zone resolution may fall back to UTC where the OS
+    /// timezone cannot be read (Android without TZ env); upgrade if alarms
+    /// drift once real users depend on wall-clock exactness.
+    fn due_ms_from(when: &str) -> Option<u64> {
+        use chrono::TimeZone;
+        let (h, m) = when.split_once(':')?;
+        let (h, m) = (h.parse::<u32>().ok()?, m.parse::<u32>().ok()?);
+        if h > 23 || m > 59 {
+            return None;
+        }
+        let now = chrono::Local::now();
+        let next = |day_off: i64| {
+            let naive =
+                (now.date_naive() + chrono::Duration::days(day_off)).and_hms_opt(h, m, 0)?;
+            now.timezone()
+                .from_local_datetime(&naive)
+                .earliest()
+                .map(|t| t.timestamp_millis() as u64)
+        };
+        let today = next(0)?;
+        if today > now_ms() {
+            Some(today)
+        } else {
+            next(1)
+        }
+    }
+
+    /// Epoch ms -> `HH:MM` in the local zone (empty string if unresolvable).
+    fn alarm_hhmm(due_ms: u64) -> String {
+        use chrono::TimeZone;
+        match chrono::Local
+            .timestamp_opt((due_ms / 1000) as i64, 0)
+            .single()
+        {
+            Some(t) => t.format("%H:%M").to_string(),
+            None => String::new(),
+        }
+    }
+
+    /// True when the due time is not today (the `(tomorrow)` suffix).
+    fn due_is_tomorrow(due_ms: u64) -> bool {
+        use chrono::TimeZone;
+        match chrono::Local
+            .timestamp_opt((due_ms / 1000) as i64, 0)
+            .single()
+        {
+            Some(t) => t.date_naive() != chrono::Local::now().date_naive(),
+            None => false,
+        }
+    }
+
+    /// Readable list of pending alarms for the home canvas.
+    fn alarm_list_text(&self) -> String {
+        let sched = lock(&self.scheduler);
+        let list = sched.list();
+        if list.is_empty() {
+            return "no alarms scheduled".into();
+        }
+        list.iter()
+            .enumerate()
+            .map(|(n, r)| {
+                let time = Self::alarm_hhmm(r.due_ms);
+                let via = if r.target == HOST {
+                    String::new()
+                } else {
+                    format!(" via {}", r.target)
+                };
+                let text = serde_json::from_str::<serde_json::Value>(&r.payload)
+                    .ok()
+                    .and_then(|v| v.get("text").and_then(|t| t.as_str()).map(String::from))
+                    .unwrap_or_default();
+                format!("{n}: {time}{via} {text}")
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
     }
 
     /// Apply the current theme to a freshly created window (UI thread).
     pub fn apply_current_theme(&self, ui: &MainWindow) {
         mandala_ui::apply_theme(ui, lock(&self.themes).current());
+    }
+
+    /// Switch the window theme exactly when the visible module context
+    /// changes: app theme for that app, the user-selected theme otherwise.
+    fn sync_theme(self: &Arc<Self>, active: Option<String>) {
+        {
+            let mut last = lock(&self.active_theme_for);
+            if *last == active {
+                return;
+            }
+            *last = active.clone();
+        }
+        let theme = {
+            let tm = lock(&self.themes);
+            active
+                .as_deref()
+                .and_then(|id| tm.for_app(id).cloned())
+                .unwrap_or_else(|| tm.current().clone())
+        };
+        let weak = lock(&self.ui).clone();
+        let id = theme.id.clone();
+        let _ = weak.upgrade_in_event_loop(move |ui| mandala_ui::apply_theme(&ui, &theme));
+        self.dispatch(Action::ThemeApplied { id });
     }
 
     // ---- Slint callbacks -------------------------------------------------
@@ -231,6 +389,19 @@ impl App {
 
     pub fn on_host_envelope(self: &Arc<Self>, env: IpcEnvelope) {
         let module = env.sender_module.clone();
+        // Module-facing scheduler API: any signed module may schedule or
+        // cancel alarms to the shell (host), or to a module the ACL already
+        // lets it message — cross-app triggers without new wiring
+        // (`{"id":..,"when":"HH:MM"|"due_ms":..,"text":..,"target":app-x?}`).
+        match env.payload_action.as_str() {
+            "schedule" => {
+                return self.schedule_from_module(&module, &env.data_json);
+            }
+            "unschedule" => {
+                return self.unschedule_from_module(&module, &env.data_json);
+            }
+            _ => {}
+        }
         let reply = ModuleReply::from_json(&env.data_json);
         let action = match env.payload_action.as_str() {
             "reply" => Action::ModuleReply {
@@ -253,5 +424,80 @@ impl App {
             )),
         };
         self.dispatch(action);
+    }
+
+    /// Alarm from a module. Payload (JSON):
+    /// `{"id": str, "when": "HH:MM" } or {"id": str, "due_ms": u64}`,
+    /// optional `"text"`, optional `"target"` (module id — only allowed if
+    /// the ACL already grants module -> target).
+    fn schedule_from_module(self: &Arc<Self>, module: &str, data: &str) {
+        let req = (|| -> Result<AlarmRequest, String> {
+            let j: serde_json::Value =
+                serde_json::from_str(data).map_err(|e| format!("bad payload: {e}"))?;
+            let id = format!(
+                "{module}:{}",
+                j.get("id")
+                    .and_then(|v| v.as_str())
+                    .ok_or("missing field `id`")?
+            );
+            let due_ms = if let Some(d) = j.get("due_ms").and_then(|v| v.as_u64()) {
+                d
+            } else {
+                let when = j
+                    .get("when")
+                    .and_then(|v| v.as_str())
+                    .ok_or("missing field `when` or `due_ms`")?;
+                Self::due_ms_from(when).ok_or("bad `when` (want HH:MM)")?
+            };
+            let text = j
+                .get("text")
+                .and_then(|v| v.as_str())
+                .unwrap_or("(no text)")
+                .to_string();
+            let target = j
+                .get("target")
+                .and_then(|v| v.as_str())
+                .map(String::from)
+                .unwrap_or_else(|| HOST.to_string());
+            if target != HOST && !self.broker.acl().permits(module, &target) {
+                return Err(format!("ACL: {module} may not trigger {target}"));
+            }
+            Ok(AlarmRequest {
+                id,
+                due_ms,
+                target,
+                action: "alarm".into(),
+                payload: serde_json::json!({ "ok": true, "text": text }).to_string(),
+            })
+        })();
+        match req {
+            Ok(req) => {
+                let out = lock(&self.scheduler).add(req);
+                let msg = match out {
+                    Ok(()) => "alarm scheduled".to_string(),
+                    Err(e) => format!("alarm rejected: {e}"),
+                };
+                self.notice(format!("[{module}] {msg}"));
+            }
+            Err(e) => self.notice(format!("[{module}] alarm rejected: {e}")),
+        }
+    }
+
+    /// Cancel a module alarm by its id (namespaced `<module>:<id>`).
+    fn unschedule_from_module(self: &Arc<Self>, module: &str, data: &str) {
+        let id_raw = serde_json::from_str::<serde_json::Value>(data)
+            .ok()
+            .and_then(|j| j.get("id").and_then(|v| v.as_str()).map(String::from));
+        let Some(id_raw) = id_raw else {
+            return self.notice(format!("[{module}] unschedule: missing `id`"));
+        };
+        let id = format!("{module}:{id_raw}");
+        let removed = lock(&self.scheduler).cancel(&id);
+        let msg = match removed {
+            Ok(true) => "alarm canceled".to_string(),
+            Ok(false) => "no such alarm".to_string(),
+            Err(e) => format!("unschedule failed: {e}"),
+        };
+        self.notice(format!("[{module}] {msg}"));
     }
 }

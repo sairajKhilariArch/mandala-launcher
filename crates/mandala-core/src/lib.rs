@@ -2,6 +2,7 @@
 //!
 //! * [`ipc_bus`]  – ACL-enforcing message broker
 //! * [`router`]   – async consumer that dispatches to modules
+//! * [`scheduler`] – persisted one-shot alarms + background dispatcher
 //! * [`loader`]   – Ed25519-verified dynamic module loading + process monitor
 //! * [`crypto`]   – SHA-256 / Ed25519 helpers and trust store
 //! * [`state`]    – pure UDF reducer (`Action -> Effect`)
@@ -22,6 +23,7 @@ pub mod ipc_bus;
 pub mod loader;
 pub mod paths;
 pub mod router;
+pub mod scheduler;
 pub mod slots;
 pub mod state;
 pub mod sys;

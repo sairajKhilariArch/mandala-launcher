@@ -94,6 +94,8 @@ env_logger = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
 ureq = { workspace = true }
+# `HH:MM` wall-clock -> epoch ms for alarms (std has no local timezone API).
+chrono = { workspace = true }
 mandala-module-api = { workspace = true }
 # Explicit slint features instead of the defaults: the default set also pulls
 # `accessibility` (accesskit), which activates AT-SPI over D-Bus during window

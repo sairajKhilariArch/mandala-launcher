@@ -113,7 +113,7 @@ impl Default for AppState {
     }
 }
 
-pub const HOME_HINT: &str = "Type to search apps.\n= 2+2   calculate\nnote ...   quick note\n> ls   terminal\nask ...   assistant\nweather Berlin   forecast\nrss headlines   feeds\ntasks   habits\nchat   Matrix\ncamera   capture\n2fa   authenticator\nvault   passwords\nlsend   local transfer\ntheme next   switch theme\nmonitor   module processes\nstore   browse & install modules";
+pub const HOME_HINT: &str = "Type to search apps.\n= 2+2   calculate\nnote ...   quick note\n> ls   terminal\nask ...   assistant\nweather Berlin   forecast\nrss headlines   feeds\ntasks   habits\nchat   Matrix\ncamera   capture\n2fa   authenticator\nvault   passwords\nlsend   local transfer\nalarm 18:30 text   reminder\ntheme next   switch theme\nmonitor   module processes\nstore   browse & install modules";
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Action {
@@ -199,6 +199,21 @@ pub enum Effect {
     /// Close the whole launcher: finish the Android activity (back to the
     /// system launcher) or quit the desktop event loop.
     ExitPlatform,
+    /// Schedule a one-shot alarm. `when` is `HH:MM`; the shell turns it into
+    /// epoch ms in the device's local zone and hands it to the scheduler.
+    /// `target` (an `@app-id` on the command) routes the alarm to a module,
+    /// else it surfaces as a home notice.
+    ScheduleAlarm {
+        when: String,
+        text: String,
+        target: Option<String>,
+    },
+    /// Print the pending alarms to the canvas.
+    ListAlarms,
+    /// Cancel the n-th upcoming alarm (0-based as shown in the list).
+    CancelAlarm {
+        index: usize,
+    },
 }
 
 pub fn reduce(state: &mut AppState, action: Action) -> Vec<Effect> {
@@ -452,6 +467,14 @@ pub fn reduce(state: &mut AppState, action: Action) -> Vec<Effect> {
                     state.canvas_text = "Opening the camera...".into();
                     fx.push(Effect::Camera);
                 }
+                Command::Alarm(args) => match parse_alarm_command(&args) {
+                    Ok(AlarmCmd::List) => fx.push(Effect::ListAlarms),
+                    Ok(AlarmCmd::Cancel { index }) => fx.push(Effect::CancelAlarm { index }),
+                    Ok(AlarmCmd::Schedule { when, text, target }) => {
+                        fx.push(Effect::ScheduleAlarm { when, text, target })
+                    }
+                    Err(usage) => state.canvas_text = usage.to_string(),
+                },
                 Command::Theme(key) => fx.push(Effect::SetTheme(key)),
                 Command::Monitor => {
                     state.store_open = false;
@@ -544,6 +567,76 @@ pub fn reduce(state: &mut AppState, action: Action) -> Vec<Effect> {
         }
     }
     fx
+}
+
+const ALARM_USAGE: &str =
+    "usage: alarm 18:30 text   |   alarm cancel 2   |   alarm   (list upcoming)";
+
+/// What a parsed `alarm …` command asked for.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum AlarmCmd {
+    List,
+    Cancel {
+        index: usize,
+    },
+    Schedule {
+        when: String,
+        text: String,
+        target: Option<String>,
+    },
+}
+
+/// `alarm` command surface: `HH:MM <text>` with an optional `@app-id` target
+/// right before the text routes the alarm to that module, else it fires as a
+/// home notice. `cancel N` removes the n-th upcoming; bare `alarm` lists.
+fn parse_alarm_command(args: &str) -> std::result::Result<AlarmCmd, &'static str> {
+    let args = args.trim();
+    if args.is_empty() {
+        return Ok(AlarmCmd::List);
+    }
+    if let Some(n) = args
+        .strip_prefix("cancel")
+        .map(str::trim)
+        .and_then(|n| n.parse::<usize>().ok())
+    {
+        return Ok(AlarmCmd::Cancel { index: n });
+    }
+    let Some((when, rest)) = args.split_once(char::is_whitespace) else {
+        return Err(ALARM_USAGE);
+    };
+    if !is_hhmm(when) {
+        return Err(ALARM_USAGE);
+    }
+    let (target, text) = match rest.trim_start().strip_prefix('@') {
+        Some(t) => match t.split_once(char::is_whitespace) {
+            Some((id, text)) if !id.is_empty() => (Some(id.to_string()), text.trim().to_string()),
+            _ => (None, rest.trim().to_string()),
+        },
+        None => (None, rest.trim().to_string()),
+    };
+    if text.is_empty() {
+        return Err(ALARM_USAGE);
+    }
+    Ok(AlarmCmd::Schedule {
+        when: when.to_string(),
+        text,
+        target,
+    })
+}
+
+/// `HH:MM` with two digits and valid hour/minute ranges.
+fn is_hhmm(s: &str) -> bool {
+    let Some((h, m)) = s.split_once(':') else {
+        return false;
+    };
+    let ok_2d = |t: &str| t.len() == 2 && t.bytes().all(|c| c.is_ascii_digit());
+    let (Some(hh), Some(mm)) = (
+        ok_2d(h).then(|| h.parse::<u8>().ok()).flatten(),
+        ok_2d(m).then(|| m.parse::<u8>().ok()).flatten(),
+    ) else {
+        return false;
+    };
+    hh <= 23 && mm <= 59
 }
 
 /// Text listing for the All-Apps drawer / live search results. The Store is
@@ -645,7 +738,6 @@ mod tests {
         reduce(&mut s, Action::Back);
         assert_eq!(s, before);
     }
-
     #[test]
     fn exit_shell_is_the_only_exit_path() {
         let mut s = st();
@@ -654,6 +746,56 @@ mod tests {
             reduce(&mut s, Action::ExitShell),
             vec![Effect::ExitPlatform]
         );
+    }
+
+    #[test]
+    fn alarm_command_schedules_cancels_and_lists() {
+        let mut s = st();
+        s.query = "alarm 18:30 make coffee".into();
+        let fx = reduce(&mut s, Action::QuerySubmitted);
+        assert_eq!(
+            fx,
+            vec![Effect::ScheduleAlarm {
+                when: "18:30".into(),
+                text: "make coffee".into(),
+                target: None
+            }]
+        );
+        assert_eq!(s.active_module, None);
+
+        s.query = "alarm 07:00 @app-weather rain".into();
+        let fx = reduce(&mut s, Action::QuerySubmitted);
+        assert_eq!(
+            fx,
+            vec![Effect::ScheduleAlarm {
+                when: "07:00".into(),
+                text: "rain".into(),
+                target: Some("app-weather".into())
+            }]
+        );
+
+        s.query = "alarm cancel 2".into();
+        assert_eq!(
+            reduce(&mut s, Action::QuerySubmitted),
+            vec![Effect::CancelAlarm { index: 2 }]
+        );
+
+        s.query = "alarm".into();
+        assert_eq!(
+            reduce(&mut s, Action::QuerySubmitted),
+            vec![Effect::ListAlarms]
+        );
+
+        for bad in [
+            "alarm abc",
+            "alarm 18:30",
+            "alarm 24:00 text",
+            "alarm 18:61 text",
+        ] {
+            s.query = bad.into();
+            assert!(reduce(&mut s, Action::QuerySubmitted).is_empty(), "{bad}");
+            assert!(s.canvas_text.contains("usage"), "{bad}");
+        }
     }
 
     #[test]

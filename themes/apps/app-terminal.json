@@ -1,0 +1,18 @@
+{
+  "theme_id": "app-terminal-phosphor",
+  "theme_name": "Phosphor Terminal",
+  "version": "1.0.0",
+  "author": "Mandala Team",
+  "tokens": {
+    "canvas_bg": "#0C0F0A",
+    "surface_primary": "#11150D",
+    "surface_border": "#1E2A18",
+    "text_primary": "#B8F5C4",
+    "text_secondary": "#5E8F68",
+    "accent_focus": "#4ADE80",
+    "cta_accent": "#22C55E",
+    "border_width_px": 1,
+    "corner_radius_px": 2,
+    "font_family": "JetBrains Mono"
+  }
+}

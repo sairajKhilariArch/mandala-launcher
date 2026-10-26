@@ -103,6 +103,9 @@ pub enum Command {
     Ai(String),
     /// `camera` -> fire the platform capture intent (Android).
     Camera,
+    /// `alarm 18:30 make coffee` / `alarm cancel N` / bare `alarm` (list).
+    /// Everything after `alarm` is spelled out to the shell by the reducer.
+    Alarm(String),
     /// Launch the slot with this id.
     Launch(&'static str),
     Empty,
@@ -148,6 +151,7 @@ pub fn parse_command(input: &str) -> Command {
         "ai" => return Command::Ai(tail.to_string()),
         "ask" if !tail.is_empty() => return Command::Ai(format!("ask {tail}")),
         "camera" | "shoot" => return Command::Camera,
+        "alarm" | "schedule" => return Command::Alarm(tail.to_string()),
         _ => {}
     }
     match search_slots(s, 1).first() {
@@ -261,5 +265,19 @@ mod tests {
     #[test]
     fn bare_note_word_launches_notes() {
         assert_eq!(parse_command("note"), Command::Launch("app-notes"));
+    }
+
+    #[test]
+    fn alarm_grammar() {
+        assert_eq!(
+            parse_command("alarm 18:30 make coffee"),
+            Command::Alarm("18:30 make coffee".into())
+        );
+        assert_eq!(
+            parse_command("alarm cancel 2"),
+            Command::Alarm("cancel 2".into())
+        );
+        assert_eq!(parse_command("alarm"), Command::Alarm("".into()));
+        assert_eq!(parse_command("schedule"), Command::Alarm("".into()));
     }
 }

@@ -6,6 +6,7 @@
 //!   modules/<id>.so.sig    detached Ed25519 signature (hex or raw)
 //!   trust/*.pub            trusted public keys (hex)
 //!   themes/*.json          user theme manifests
+//!   themes/apps/<id>.json  per-app theme overrides
 //!   data/<id>/             per-module private storage
 //!   runtime/               verified copies actually loaded (private)
 //!   quarantine/            rejected binaries
@@ -41,6 +42,10 @@ impl HostPaths {
     }
     pub fn themes_dir(&self) -> PathBuf {
         self.root.join("themes")
+    }
+    /// Per-app theme overrides (`themes/apps/<module-id>.json`).
+    pub fn app_themes_dir(&self) -> PathBuf {
+        self.themes_dir().join("apps")
     }
     pub fn data_dir(&self, module_id: &str) -> PathBuf {
         self.root.join("data").join(module_id)
