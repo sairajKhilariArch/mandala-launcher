@@ -6,7 +6,7 @@
 
 ## Executive Summary
 
-Modern mobile operating systems are engineered around engagement optimization, using high-saturation visual cues, unpredictable reward mechanics, and friction-free application launching to induce reflexive device usage. **Mandala Launcher (`mandala-shell`)** is a non-attentional, privacy-first, tri-panel mobile shell designed to dismantle these mobile dopamine loops.
+Modern mobile are engineered around engagement optimization, using high-saturation visual cues, unpredictable reward mechanics, and friction-free application launching to induce reflexive device usage. **Mandala Launcher (`mandala-shell`)** is a non-attentional, privacy-first, tri-panel mobile shell designed to dismantle these mobile dopamine loops.
 
 Built on **Rust** and **Slint**, this architecture introduces:
 
@@ -24,7 +24,9 @@ Built on **Rust** and **Slint**, this architecture introduces:
 
 Fitts's Law states that the target acquisition time is a function of target distance and target size:
 
-$$MT = a + b \log_2 \left( \frac{2D}{W} \right)$$
+$$
+MT = a + b \log_2 \left( \frac{2D}{W} \right)
+$$
 
 On mobile displays, physical hand movement constraints divide the screen into distinct reachability zones.
 
@@ -55,10 +57,10 @@ On mobile displays, physical hand movement constraints divide the screen into di
 
 ### 1.2 "Knowing" vs. "Unknowing" Usage Mechanics
 
-| Cognitive Mode | Trigger Mechanism | Target Applications | UX Strategy & Placement |
-| :--- | :--- | :--- | :--- |
-| **Knowing / Intentional** | Real-world goal (e.g., capture note, execute command, copy 2FA code). | Terminal, Notes, 2FA (Aegis), Calculator, Password Vault. | **Zero Friction:** Fixed in Panel A or Panel C for instant access. |
-| **Unknowing / Impulsive** | Dopamine seeking, boredom, muscle-memory loops, visual notifications. | News feeds, RSS, social media, gallery checking. | **Micro-Friction:** Placed in Panel B (non-dominant stretch) or behind explicit lower-third edge gestures. |
+| Cognitive Mode                  | Trigger Mechanism                                                     | Target Applications                                       | UX Strategy & Placement                                                                                          |
+| :------------------------------ | :-------------------------------------------------------------------- | :-------------------------------------------------------- | :--------------------------------------------------------------------------------------------------------------- |
+| **Knowing / Intentional** | Real-world goal (e.g., capture note, execute command, copy 2FA code). | Terminal, Notes, 2FA (Aegis), Calculator, Password Vault. | **Zero Friction:** Fixed in Panel A or Panel C for instant access.                                         |
+| **Unknowing / Impulsive** | Dopamine seeking, boredom, muscle-memory loops, visual notifications. | News feeds, RSS, social media, gallery checking.          | **Micro-Friction:** Placed in Panel B (non-dominant stretch) or behind explicit lower-third edge gestures. |
 
 ---
 
@@ -90,6 +92,7 @@ The interface maps 15 discrete core applications across 3 panels (5 slots per pa
 ### Detailed Panel Allocation
 
 #### Panel A: Bottom Dock (High-Intent Core)
+
 1. **Terminal:** Embedded command line for shell automation, custom scripts, and direct system control.
 2. **Notes / Micro-Capture:** Instant raw-text buffer bypassing app-boot overhead for rapid thought capture.
 3. **All Apps Drawer:** Fuzzy-search keyboard launcher avoiding visual grid icons.
@@ -97,6 +100,7 @@ The interface maps 15 discrete core applications across 3 panels (5 slots per pa
 5. **AI Assistant:** On-device contextual language processor and task automation pipeline.
 
 #### Panel B: Left Panel (Passive Information & Retrieval)
+
 1. **Weather:** Passive, non-tracked environmental awareness.
 2. **RSS / News Feeder:** Reader-mode news fetching without algorithmic recommendation loops.
 3. **Task & Habit Tracker:** Plain-text or structured todo management.
@@ -104,6 +108,7 @@ The interface maps 15 discrete core applications across 3 panels (5 slots per pa
 5. **Media Gallery:** Minimalist local image/video file viewer.
 
 #### Panel C: Right Panel (Active Utilities & Security)
+
 1. **2FA Authenticator (Aegis):** Time-based one-time password (TOTP) generator.
 2. **Password Vault (KeePassDX/Strongbox):** Encrypted local credential store.
 3. **LocalSend File Share:** Zero-telemetry local peer-to-peer Wi-Fi transfer.
@@ -136,6 +141,7 @@ To eliminate conflicts with native OS navigation (Android/iOS Edge Back gestures
 ```
 
 ### Gesture Engine Mapping
+
 1. **Lower 30% Inward Edge Swipe (Left/Right):** Opens Panel B or Panel C respectively.
 2. **Upper 70% Inward Edge Swipe (Left/Right):** Passed through directly to OS window manager for native "Back" navigation.
 3. **Single Upward Drag from Bottom Anchor:** Minimizes the active sub-module and clears focus to the main workspace.
@@ -210,7 +216,7 @@ export component MainWindow inherits Window {
                     border-radius: ThemePalette.corner-radius;
                     border-width: ThemePalette.border-width;
                     border-color: ThemePalette.surface-border;
-                    
+                  
                     TouchArea {
                         clicked => { root.trigger-ipc-event("app-terminal", "launch"); }
                     }
@@ -417,6 +423,7 @@ export component ResponsiveLayoutEngine {
 ```
 
 ### 8.2 Preset Styles
+
 1. **Minimalist OLED (Default):** `#000000` background, `#E0E0E0` soft text, `#D4A373` amber accent.
 2. **Cartoonish / Cel-Shaded:** `#FFF9EC` cream fill, `#111111` bold borders, `#FF6B6B` pastel accents.
 3. **Retro Terminal:** `#0D1117` dark slate, `#00FF66` phosphor green text.
