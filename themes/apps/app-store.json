@@ -1,0 +1,18 @@
+{
+  "theme_id": "app-store-market",
+  "theme_name": "Market Green",
+  "version": "1.0.0",
+  "author": "Mandala Team",
+  "tokens": {
+    "canvas_bg": "#0B0F0D",
+    "surface_primary": "#121915",
+    "surface_border": "#20302A",
+    "text_primary": "#EAF4EC",
+    "text_secondary": "#7EA184",
+    "accent_focus": "#34D399",
+    "cta_accent": "#10B981",
+    "border_width_px": 0,
+    "corner_radius_px": 8,
+    "font_family": "Inter"
+  }
+}

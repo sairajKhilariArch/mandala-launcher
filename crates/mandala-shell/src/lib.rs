@@ -96,6 +96,16 @@ fn run_inner(paths: HostPaths, exit_after_boot: bool) -> anyhow::Result<()> {
     for w in themes.load_app_dir(&paths.app_themes_dir()) {
         log::warn!("app theme skipped: {w}");
     }
+    // Runtime assignments survive restarts: {"app-vault": "cel-shaded"}.
+    if let Ok(asgn) = std::fs::read_to_string(paths.themes_dir().join("app-overrides.json")) {
+        if let Ok(serde_json::Value::Object(map)) = serde_json::from_str(&asgn) {
+            for (app, id) in map {
+                if let Some(id) = id.as_str() {
+                    themes.restore_override(&app, id);
+                }
+            }
+        }
+    }
     let after_themes = boot.elapsed();
 
     // One worker drives the router task (it is single-threaded by design) and

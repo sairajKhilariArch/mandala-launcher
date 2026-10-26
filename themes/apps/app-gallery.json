@@ -1,0 +1,18 @@
+{
+  "theme_id": "app-gallery-studio",
+  "theme_name": "Studio",
+  "version": "1.0.0",
+  "author": "Mandala Team",
+  "tokens": {
+    "canvas_bg": "#0D0A09",
+    "surface_primary": "#161110",
+    "surface_border": "#2A211F",
+    "text_primary": "#F2EBE7",
+    "text_secondary": "#957F75",
+    "accent_focus": "#FB923C",
+    "cta_accent": "#F97316",
+    "border_width_px": 0,
+    "corner_radius_px": 10,
+    "font_family": "Inter"
+  }
+}

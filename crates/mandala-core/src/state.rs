@@ -113,7 +113,7 @@ impl Default for AppState {
     }
 }
 
-pub const HOME_HINT: &str = "Type to search apps.\n= 2+2   calculate\nnote ...   quick note\n> ls   terminal\nask ...   assistant\nweather Berlin   forecast\nrss headlines   feeds\ntasks   habits\nchat   Matrix\ncamera   capture\n2fa   authenticator\nvault   passwords\nlsend   local transfer\nalarm 18:30 text   reminder\ntheme next   switch theme\nmonitor   module processes\nstore   browse & install modules";
+pub const HOME_HINT: &str = "Type to search apps.\n= 2+2   calculate\nnote ...   quick note\n> ls   terminal\nask ...   assistant\nweather Berlin   forecast\nrss headlines   feeds\ntasks   habits\nchat   Matrix\ncamera   capture\n2fa   authenticator\nvault   passwords\nlsend   local transfer\nalarm 18:30 text   reminder\ntheme next   switch theme\ntheme <app> <name>   theme one app\nmonitor   module processes\nstore   browse & install modules";
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Action {
@@ -183,6 +183,11 @@ pub enum Effect {
     UnloadAll,
     RestartAll,
     SetTheme(String),
+    /// Assign any theme to one app (persists at the shell).
+    SetAppTheme {
+        app: String,
+        key: String,
+    },
     /// Android-only: set the system wallpaper from a local image.
     SetWallpaper(String),
     /// Android-only: ask for the draw-over-other-apps permission.
@@ -476,6 +481,9 @@ pub fn reduce(state: &mut AppState, action: Action) -> Vec<Effect> {
                     Err(usage) => state.canvas_text = usage.to_string(),
                 },
                 Command::Theme(key) => fx.push(Effect::SetTheme(key)),
+                Command::ThemeSet { app, key } => {
+                    fx.push(Effect::SetAppTheme { app, key });
+                }
                 Command::Monitor => {
                     state.store_open = false;
                     state.monitor_open = true;
@@ -955,6 +963,15 @@ mod tests {
         assert_eq!(
             reduce(&mut s, Action::QuerySubmitted),
             vec![Effect::SetTheme("next".into())]
+        );
+
+        s.query = "theme notes phosphor".into();
+        assert_eq!(
+            reduce(&mut s, Action::QuerySubmitted),
+            vec![Effect::SetAppTheme {
+                app: "app-notes".into(),
+                key: "phosphor".into()
+            }]
         );
 
         s.query = "monitor".into();

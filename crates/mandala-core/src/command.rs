@@ -71,6 +71,12 @@ pub enum Command {
     Note(String),
     /// `theme next` / `theme cel-shaded`.
     Theme(String),
+    /// `theme <app> <name>`: assign any theme to one app
+    /// (`theme notes phosphor`, `theme app-vault cel`).
+    ThemeSet {
+        app: String,
+        key: String,
+    },
     /// `monitor` opens the module process monitor.
     Monitor,
     /// `store` opens the module store overlay.
@@ -134,7 +140,38 @@ pub fn parse_command(input: &str) -> Command {
     };
     match head.to_ascii_lowercase().as_str() {
         "note" | "n" if !tail.is_empty() => return Command::Note(tail.to_string()),
-        "theme" if !tail.is_empty() => return Command::Theme(tail.to_string()),
+        "theme" if !tail.is_empty() => {
+            // Two-token tail whose head names a slot (with or without the
+            // `app-` prefix) is a per-app assignment, with the overlays
+            // store/monitor handled the same way; anything else stays a
+            // plain theme selection.
+            if let Some((app_token, key)) = tail.split_once(char::is_whitespace) {
+                let key = key.trim();
+                if !key.is_empty() {
+                    let app = match app_token {
+                        "store" => "app-store".to_string(),
+                        "monitor" => "app-monitor".to_string(),
+                        other => {
+                            // Consume the proposal only on a real slot match.
+                            let probe = if other.starts_with("app-") {
+                                other.to_string()
+                            } else {
+                                format!("app-{other}")
+                            };
+                            if crate::slots::by_id(&probe).is_none() {
+                                return Command::Theme(tail.to_string());
+                            }
+                            probe
+                        }
+                    };
+                    return Command::ThemeSet {
+                        app,
+                        key: key.to_string(),
+                    };
+                }
+            }
+            return Command::Theme(tail.to_string());
+        }
         "monitor" | "ps" => return Command::Monitor,
         "store" => return Command::Store,
         "2fa" | "totp" | "aegis" => return Command::Aegis(tail.to_string()),
@@ -192,6 +229,36 @@ mod tests {
         );
         assert_eq!(parse_command("n x"), Command::Note("x".into()));
         assert_eq!(parse_command("theme next"), Command::Theme("next".into()));
+        assert_eq!(
+            parse_command("theme phosphor"),
+            Command::Theme("phosphor".into())
+        );
+        assert_eq!(
+            parse_command("theme notes phosphor"),
+            Command::ThemeSet {
+                app: "app-notes".into(),
+                key: "phosphor".into()
+            }
+        );
+        assert_eq!(
+            parse_command("theme app-vault cel"),
+            Command::ThemeSet {
+                app: "app-vault".into(),
+                key: "cel".into()
+            }
+        );
+        assert_eq!(
+            parse_command("theme store market"),
+            Command::ThemeSet {
+                app: "app-store".into(),
+                key: "market".into()
+            }
+        );
+        // A two-token tail that is not an app stays a theme selection.
+        assert_eq!(
+            parse_command("theme nope x"),
+            Command::Theme("nope x".into())
+        );
         assert_eq!(parse_command("monitor"), Command::Monitor);
         assert_eq!(parse_command("store"), Command::Store);
         assert_eq!(parse_command("termin"), Command::Launch("app-terminal"));

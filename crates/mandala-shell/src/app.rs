@@ -75,9 +75,21 @@ impl App {
         let effects = reduce(&mut lock(&self.state), action);
         self.repaint();
         // Theme follows the visible context: an app with its own theme gets
-        // it on open; back to home restores the selected theme.
-        let active = lock(&self.state).active_module.clone();
-        self.sync_theme(active);
+        // it on open; overlays key their own (store/drawer/monitor); back to
+        // home restores the selected theme.
+        let target = {
+            let st = lock(&self.state);
+            if st.store_open {
+                Some("app-store".to_string())
+            } else if st.apps_open {
+                Some("app-drawer".to_string())
+            } else if st.monitor_open {
+                Some("app-monitor".to_string())
+            } else {
+                st.active_module.clone()
+            }
+        };
+        self.sync_theme(target);
         if !effects.is_empty() {
             let this = self.clone();
             // Module calls may block (file I/O, dlopen): keep them off the UI thread.
@@ -186,6 +198,30 @@ impl App {
                     }
                     Err(e) => self.dispatch(Action::Notice(e.to_string())),
                 }
+            }
+            Effect::SetAppTheme { app, key } => {
+                // `default` resets to the app's manifest/builtin theme.
+                let mut themes = lock(&self.themes);
+                let result = if key.eq_ignore_ascii_case("default") {
+                    if themes.clear_app(&app) {
+                        Ok(format!("{app}: back to its own theme"))
+                    } else {
+                        Err(format!("{app}: no assigned theme to reset"))
+                    }
+                } else {
+                    themes
+                        .assign_app(&app, &key)
+                        .cloned()
+                        .map(|t| format!("{app}: now themed {}", t.name))
+                        .map_err(|e| e.to_string())
+                };
+                drop(themes);
+                if result.is_ok() {
+                    self.save_app_overrides();
+                    // Bust the tracker so the next sync re-applies.
+                    *lock(&self.active_theme_for) = None;
+                }
+                self.dispatch(Action::Notice(result.unwrap_or_else(|e| e)));
             }
             Effect::FetchCatalog => match self.store.fetch(&self.host) {
                 Ok(out) => self.dispatch(Action::StoreCatalog {
@@ -345,6 +381,16 @@ impl App {
     /// Apply the current theme to a freshly created window (UI thread).
     pub fn apply_current_theme(&self, ui: &MainWindow) {
         mandala_ui::apply_theme(ui, lock(&self.themes).current());
+    }
+
+    /// Persist runtime per-app theme assignments to `themes/app-overrides.json`.
+    fn save_app_overrides(&self) {
+        let map = lock(&self.themes).overrides().clone();
+        let dir = self.host.paths().themes_dir();
+        let _ = std::fs::create_dir_all(&dir);
+        if let Ok(json) = serde_json::to_string_pretty(&map) {
+            let _ = std::fs::write(dir.join("app-overrides.json"), json);
+        }
     }
 
     /// Switch the window theme exactly when the visible module context

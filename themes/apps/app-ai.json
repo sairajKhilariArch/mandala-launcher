@@ -1,0 +1,18 @@
+{
+  "theme_id": "app-ai-atelier",
+  "theme_name": "Atelier AI",
+  "version": "1.0.0",
+  "author": "Mandala Team",
+  "tokens": {
+    "canvas_bg": "#0B0A14",
+    "surface_primary": "#14121F",
+    "surface_border": "#252234",
+    "text_primary": "#ECEBFA",
+    "text_secondary": "#8581A8",
+    "accent_focus": "#A78BFA",
+    "cta_accent": "#8B5CF6",
+    "border_width_px": 0,
+    "corner_radius_px": 12,
+    "font_family": "Inter"
+  }
+}

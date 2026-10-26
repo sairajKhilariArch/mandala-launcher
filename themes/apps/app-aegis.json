@@ -1,0 +1,18 @@
+{
+  "theme_id": "app-aegis-spectrum",
+  "theme_name": "Spectrum",
+  "version": "1.0.0",
+  "author": "Mandala Team",
+  "tokens": {
+    "canvas_bg": "#081210",
+    "surface_primary": "#0E1A17",
+    "surface_border": "#1D2F2A",
+    "text_primary": "#E4F4EF",
+    "text_secondary": "#7FA29A",
+    "accent_focus": "#6EE7B7",
+    "cta_accent": "#10B981",
+    "border_width_px": 1,
+    "corner_radius_px": 2,
+    "font_family": "JetBrains Mono"
+  }
+}

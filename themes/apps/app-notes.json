@@ -1,0 +1,18 @@
+{
+  "theme_id": "app-notes-paper",
+  "theme_name": "Paper Notes",
+  "version": "1.0.0",
+  "author": "Mandala Team",
+  "tokens": {
+    "canvas_bg": "#12100C",
+    "surface_primary": "#1A1712",
+    "surface_border": "#2E281C",
+    "text_primary": "#EFE6D4",
+    "text_secondary": "#9C8F76",
+    "accent_focus": "#DDB892",
+    "cta_accent": "#C08B5C",
+    "border_width_px": 1,
+    "corner_radius_px": 6,
+    "font_family": "Georgia"
+  }
+}

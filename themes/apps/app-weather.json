@@ -1,0 +1,18 @@
+{
+  "theme_id": "app-weather-horizon",
+  "theme_name": "Horizon",
+  "version": "1.0.0",
+  "author": "Mandala Team",
+  "tokens": {
+    "canvas_bg": "#081019",
+    "surface_primary": "#0F1926",
+    "surface_border": "#1E3045",
+    "text_primary": "#EAF2FA",
+    "text_secondary": "#7C9CB5",
+    "accent_focus": "#60A5FA",
+    "cta_accent": "#3B82F6",
+    "border_width_px": 0,
+    "corner_radius_px": 10,
+    "font_family": "Inter"
+  }
+}

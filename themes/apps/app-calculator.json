@@ -1,0 +1,18 @@
+{
+  "theme_id": "app-calculator-brass",
+  "theme_name": "Brass Pocket",
+  "version": "1.0.0",
+  "author": "Mandala Team",
+  "tokens": {
+    "canvas_bg": "#100E08",
+    "surface_primary": "#18150D",
+    "surface_border": "#2B2617",
+    "text_primary": "#F0EBDC",
+    "text_secondary": "#98937D",
+    "accent_focus": "#FBBF24",
+    "cta_accent": "#EAB308",
+    "border_width_px": 1,
+    "corner_radius_px": 12,
+    "font_family": "JetBrains Mono"
+  }
+}

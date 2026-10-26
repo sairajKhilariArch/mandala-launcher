@@ -1,0 +1,18 @@
+{
+  "theme_id": "app-drawer-air",
+  "theme_name": "Air Grid",
+  "version": "1.0.0",
+  "author": "Mandala Team",
+  "tokens": {
+    "canvas_bg": "#121416",
+    "surface_primary": "#191C1F",
+    "surface_border": "#26292E",
+    "text_primary": "#EDEEF0",
+    "text_secondary": "#8A8F96",
+    "accent_focus": "#E0E0E0",
+    "cta_accent": "#9CA3AF",
+    "border_width_px": 0,
+    "corner_radius_px": 8,
+    "font_family": "Inter"
+  }
+}

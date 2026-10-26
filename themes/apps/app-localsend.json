@@ -1,0 +1,18 @@
+{
+  "theme_id": "app-localsend-airdrop",
+  "theme_name": "Ship It",
+  "version": "1.0.0",
+  "author": "Mandala Team",
+  "tokens": {
+    "canvas_bg": "#0A0D14",
+    "surface_primary": "#111726",
+    "surface_border": "#1F2A3C",
+    "text_primary": "#E8ECF6",
+    "text_secondary": "#7E8BA8",
+    "accent_focus": "#93C5FD",
+    "cta_accent": "#818CF8",
+    "border_width_px": 0,
+    "corner_radius_px": 10,
+    "font_family": "Inter"
+  }
+}

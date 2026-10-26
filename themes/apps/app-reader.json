@@ -1,0 +1,18 @@
+{
+  "theme_id": "app-reader-library",
+  "theme_name": "Library",
+  "version": "1.0.0",
+  "author": "Mandala Team",
+  "tokens": {
+    "canvas_bg": "#141210",
+    "surface_primary": "#1C1915",
+    "surface_border": "#2E2921",
+    "text_primary": "#F2E8D5",
+    "text_secondary": "#9C9280",
+    "accent_focus": "#C0A062",
+    "cta_accent": "#A08040",
+    "border_width_px": 1,
+    "corner_radius_px": 4,
+    "font_family": "Georgia"
+  }
+}

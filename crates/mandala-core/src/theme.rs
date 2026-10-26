@@ -13,6 +13,22 @@ pub const PRESET_RETRO: &str = include_str!("../../../themes/retro-terminal.json
 /// Per-app theme presets: shown while that module is the active view.
 pub const APP_PRESET_TERMINAL: &str = include_str!("../../../themes/apps/app-terminal.json");
 pub const APP_PRESET_CAMERA: &str = include_str!("../../../themes/apps/app-camera.json");
+pub const APP_PRESET_NOTES: &str = include_str!("../../../themes/apps/app-notes.json");
+pub const APP_PRESET_CHAT: &str = include_str!("../../../themes/apps/app-chat.json");
+pub const APP_PRESET_VAULT: &str = include_str!("../../../themes/apps/app-vault.json");
+/// The Store overlay is a builtin (no module file), keyed `app-store`.
+pub const APP_PRESET_STORE: &str = include_str!("../../../themes/apps/app-store.json");
+pub const APP_PRESET_AI: &str = include_str!("../../../themes/apps/app-ai.json");
+pub const APP_PRESET_WEATHER: &str = include_str!("../../../themes/apps/app-weather.json");
+pub const APP_PRESET_RSS: &str = include_str!("../../../themes/apps/app-rss.json");
+pub const APP_PRESET_TASKS: &str = include_str!("../../../themes/apps/app-tasks.json");
+pub const APP_PRESET_READER: &str = include_str!("../../../themes/apps/app-reader.json");
+pub const APP_PRESET_GALLERY: &str = include_str!("../../../themes/apps/app-gallery.json");
+pub const APP_PRESET_AEGIS: &str = include_str!("../../../themes/apps/app-aegis.json");
+pub const APP_PRESET_LOCALSEND: &str = include_str!("../../../themes/apps/app-localsend.json");
+pub const APP_PRESET_CALCULATOR: &str = include_str!("../../../themes/apps/app-calculator.json");
+pub const APP_PRESET_DRAWER: &str = include_str!("../../../themes/apps/app-drawer.json");
+pub const APP_PRESET_MONITOR: &str = include_str!("../../../themes/apps/app-monitor.json");
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct ThemeManifest {
@@ -156,12 +172,15 @@ impl ThemeManifest {
     }
 }
 
-/// Holds the available themes, the active one, and per-app overrides
-/// (`<home>/themes/apps/<app-id>.json`) that apply while an app is open.
+/// Holds the available themes, the active one, per-app overrides loaded from
+/// `themes/apps/*.json` or assigned at runtime (`theme <app> <name>`), that
+/// apply while an app is open.
 pub struct ThemeManager {
     themes: Vec<ResolvedTheme>,
     current: usize,
     apps: HashMap<String, ResolvedTheme>,
+    /// Runtime assignments (app id → theme id); win over `apps`.
+    overrides: HashMap<String, String>,
 }
 
 impl ThemeManager {
@@ -178,6 +197,21 @@ impl ThemeManager {
         let apps = [
             ("app-terminal", APP_PRESET_TERMINAL),
             ("app-camera", APP_PRESET_CAMERA),
+            ("app-notes", APP_PRESET_NOTES),
+            ("app-chat", APP_PRESET_CHAT),
+            ("app-vault", APP_PRESET_VAULT),
+            ("app-store", APP_PRESET_STORE),
+            ("app-ai", APP_PRESET_AI),
+            ("app-weather", APP_PRESET_WEATHER),
+            ("app-rss", APP_PRESET_RSS),
+            ("app-tasks", APP_PRESET_TASKS),
+            ("app-reader", APP_PRESET_READER),
+            ("app-gallery", APP_PRESET_GALLERY),
+            ("app-aegis", APP_PRESET_AEGIS),
+            ("app-localsend", APP_PRESET_LOCALSEND),
+            ("app-calculator", APP_PRESET_CALCULATOR),
+            ("app-drawer", APP_PRESET_DRAWER),
+            ("app-monitor", APP_PRESET_MONITOR),
         ]
         .iter()
         .map(|(id, j)| {
@@ -191,6 +225,7 @@ impl ThemeManager {
             themes,
             current: 0,
             apps,
+            overrides: HashMap::new(),
         }
     }
 
@@ -249,9 +284,65 @@ impl ThemeManager {
         warnings
     }
 
-    /// The theme to show while app `id` is the active view.
+    /// The theme to show while app `id` is the active view: a runtime
+    /// assignment wins over the loaded per-app manifest.
     pub fn for_app(&self, id: &str) -> Option<&ResolvedTheme> {
-        self.apps.get(id)
+        self.overrides
+            .get(id)
+            .and_then(|tid| self.themes.iter().find(|t| &t.id == tid))
+            .or_else(|| self.apps.get(id))
+    }
+
+    /// Index of a theme by exact id, unique id prefix, or (used by `select`).
+    fn resolve_index(&self, key: &str) -> Option<usize> {
+        let key = key.trim().to_ascii_lowercase();
+        let exact = self
+            .themes
+            .iter()
+            .position(|t| t.id.to_ascii_lowercase() == key);
+        exact.or_else(|| {
+            let hits: Vec<_> = self
+                .themes
+                .iter()
+                .enumerate()
+                .filter(|(_, t)| t.id.to_ascii_lowercase().starts_with(&key))
+                .map(|(i, _)| i)
+                .collect();
+            (hits.len() == 1).then(|| hits[0])
+        })
+    }
+
+    /// Assign any known theme to `app`: applies while that app is on screen.
+    pub fn assign_app(&mut self, app: &str, key: &str) -> Result<&ResolvedTheme> {
+        let idx = self.resolve_index(key).ok_or_else(|| {
+            MandalaError::Theme(format!(
+                "unknown theme `{key}` (have: {})",
+                self.ids().join(", ")
+            ))
+        })?;
+        let tid = self.themes[idx].id.clone();
+        self.overrides.insert(app.to_string(), tid);
+        Ok(&self.themes[idx])
+    }
+
+    /// Forget `app`'s assignment (next view uses its manifest or builtin).
+    /// Returns `false` when there was nothing assigned.
+    pub fn clear_app(&mut self, app: &str) -> bool {
+        self.overrides.remove(app).is_some()
+    }
+
+    /// Runtime assignments for persistence.
+    pub fn overrides(&self) -> &HashMap<String, String> {
+        &self.overrides
+    }
+
+    /// Restore a persisted assignment; only accepted when the theme id is
+    /// known, so a removed theme degrades to the app manifest instead of
+    /// silently breaking the app view.
+    pub fn restore_override(&mut self, app: &str, theme_id: &str) {
+        if self.themes.iter().any(|t| t.id == theme_id) {
+            self.overrides.insert(app.to_string(), theme_id.to_string());
+        }
     }
 
     pub fn add(&mut self, theme: ResolvedTheme) {
@@ -272,26 +363,12 @@ impl ThemeManager {
 
     /// Select by exact id, unique id prefix, or the keyword `next`.
     pub fn select(&mut self, key: &str) -> Result<&ResolvedTheme> {
-        let key = key.trim().to_ascii_lowercase();
-        if key == "next" {
+        let key = key.trim();
+        if key.eq_ignore_ascii_case("next") {
             self.current = (self.current + 1) % self.themes.len();
             return Ok(self.current());
         }
-        let exact = self
-            .themes
-            .iter()
-            .position(|t| t.id.to_ascii_lowercase() == key);
-        let idx = exact.or_else(|| {
-            let hits: Vec<_> = self
-                .themes
-                .iter()
-                .enumerate()
-                .filter(|(_, t)| t.id.to_ascii_lowercase().starts_with(&key))
-                .map(|(i, _)| i)
-                .collect();
-            (hits.len() == 1).then(|| hits[0])
-        });
-        match idx {
+        match self.resolve_index(key) {
             Some(i) => {
                 self.current = i;
                 Ok(self.current())
@@ -394,11 +471,15 @@ mod tests {
     #[test]
     fn app_themes_builtin_and_overridable() {
         let m = ThemeManager::with_presets();
-        assert!(m.for_app("app-notes").is_none());
+        assert!(m.for_app("app-bogus").is_none());
         assert_eq!(
             m.for_app("app-terminal").unwrap().id,
             "app-terminal-phosphor"
         );
+        assert_eq!(m.for_app("app-notes").unwrap().id, "app-notes-paper");
+        assert_eq!(m.for_app("app-chat").unwrap().id, "app-chat-wave");
+        assert_eq!(m.for_app("app-vault").unwrap().id, "app-vault-iron");
+        assert_eq!(m.for_app("app-store").unwrap().id, "app-store-market");
         assert_eq!(m.for_app("app-camera").unwrap().font_family, "Inter");
 
         let dir = tempfile::tempdir().unwrap();
@@ -430,6 +511,49 @@ mod tests {
                 a: 255
             }
         );
+    }
+
+    #[test]
+    fn app_assignments_win_and_reset() {
+        let mut m = ThemeManager::with_presets();
+        assert_eq!(m.for_app("app-notes").unwrap().id, "app-notes-paper");
+        // Assign by unique prefix.
+        assert_eq!(m.assign_app("app-notes", "cel").unwrap().id, "cel-shaded");
+        assert_eq!(m.for_app("app-notes").unwrap().id, "cel-shaded");
+        assert!(m.assign_app("app-notes", "zzz").is_err());
+        // Assignments persist and restore only for known ids.
+        let json = serde_json::to_string(m.overrides()).unwrap();
+        let restored: HashMap<String, String> = serde_json::from_str(&json).unwrap();
+        let mut m = ThemeManager::with_presets();
+        m.restore_override("app-notes", "cel-shaded");
+        m.restore_override("app-weather", "gone-theme");
+        assert_eq!(m.for_app("app-notes").unwrap().id, "cel-shaded");
+        assert_eq!(m.for_app("app-weather").unwrap().id, "app-weather-horizon");
+        assert!(restored.contains_key("app-notes"));
+        // Reset falls back to the builtin manifest.
+        assert!(m.clear_app("app-notes"));
+        assert!(!m.clear_app("app-notes"));
+        assert_eq!(m.for_app("app-notes").unwrap().id, "app-notes-paper");
+    }
+
+    /// Every module slot and every builtin overlay starts with a theme of
+    /// its own; adding a slot without a manifest fails here.
+    #[test]
+    fn builtin_app_themes_cover_every_surface() {
+        let m = ThemeManager::with_presets();
+        for slot in crate::slots::SLOTS.iter() {
+            assert!(
+                m.for_app(slot.id).is_some(),
+                "{} has no builtin theme",
+                slot.id
+            );
+        }
+        for overlay in ["app-store", "app-monitor"] {
+            assert!(
+                m.for_app(overlay).is_some(),
+                "{overlay} has no builtin theme"
+            );
+        }
     }
 
     #[test]

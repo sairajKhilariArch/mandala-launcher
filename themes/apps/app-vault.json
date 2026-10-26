@@ -1,0 +1,18 @@
+{
+  "theme_id": "app-vault-iron",
+  "theme_name": "Iron Vault",
+  "version": "1.0.0",
+  "author": "Mandala Team",
+  "tokens": {
+    "canvas_bg": "#070809",
+    "surface_primary": "#0F1113",
+    "surface_border": "#26292E",
+    "text_primary": "#EDEDF0",
+    "text_secondary": "#7A7E88",
+    "accent_focus": "#94A3B8",
+    "cta_accent": "#64748B",
+    "border_width_px": 1,
+    "corner_radius_px": 2,
+    "font_family": "Inter"
+  }
+}

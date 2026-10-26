@@ -1,0 +1,18 @@
+{
+  "theme_id": "app-chat-wave",
+  "theme_name": "Signal Wave",
+  "version": "1.0.0",
+  "author": "Mandala Team",
+  "tokens": {
+    "canvas_bg": "#080D10",
+    "surface_primary": "#0E1519",
+    "surface_border": "#1C2A30",
+    "text_primary": "#DFF3F5",
+    "text_secondary": "#6E94A0",
+    "accent_focus": "#38BDF8",
+    "cta_accent": "#0EA5E9",
+    "border_width_px": 0,
+    "corner_radius_px": 8,
+    "font_family": "Inter"
+  }
+}

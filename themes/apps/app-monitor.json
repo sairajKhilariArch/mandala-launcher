@@ -1,0 +1,18 @@
+{
+  "theme_id": "app-monitor-heartbeat",
+  "theme_name": "Heartbeat",
+  "version": "1.0.0",
+  "author": "Mandala Team",
+  "tokens": {
+    "canvas_bg": "#100B09",
+    "surface_primary": "#1A1210",
+    "surface_border": "#2E211E",
+    "text_primary": "#F4E8E4",
+    "text_secondary": "#A38380",
+    "accent_focus": "#F87171",
+    "cta_accent": "#EF4444",
+    "border_width_px": 1,
+    "corner_radius_px": 4,
+    "font_family": "JetBrains Mono"
+  }
+}
