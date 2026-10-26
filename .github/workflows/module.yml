@@ -145,8 +145,10 @@ jobs:
             git checkout -q -B store FETCH_HEAD
           else
             # First publish ever: the store branch has no history yet.
+            # The worktree is empty (fresh `git init`, unborn orphan branch),
+            # so there is nothing to clear — `git rm -rf .` would die with
+            # "pathspec '.' did not match any files" (exit 128) under `set -e`.
             git checkout -q --orphan store
-            git rm -q -rf .
           fi
 
           mkdir -p modules registry
