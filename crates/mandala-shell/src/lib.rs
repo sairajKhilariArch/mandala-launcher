@@ -193,6 +193,15 @@ fn run_inner(paths: HostPaths, exit_after_boot: bool) -> anyhow::Result<()> {
         let app = app.clone();
         move || app.dispatch(Action::StoreOpen)
     });
+    // Escape / Android back: close the nearest overlay or app, never exit.
+    ui.on_back({
+        let app = app.clone();
+        move || app.dispatch(Action::Back)
+    });
+    ui.on_exit_shell({
+        let app = app.clone();
+        move || app.dispatch(Action::ExitShell)
+    });
 
     let after_wiring = boot.elapsed();
 

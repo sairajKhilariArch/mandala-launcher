@@ -1,0 +1,18 @@
+{
+  "theme_id": "aurora-slate-dark",
+  "theme_name": "Aurora Slate",
+  "version": "1.0.0",
+  "author": "Mandala Team",
+  "tokens": {
+    "canvas_bg": "#0B0F14",
+    "surface_primary": "#151B23",
+    "surface_border": "#26303B",
+    "text_primary": "#E6EDF3",
+    "text_secondary": "#8C9AA9",
+    "accent_focus": "#2DD4BF",
+    "cta_accent": "#F97316",
+    "border_width_px": 1,
+    "corner_radius_px": 8,
+    "font_family": "Inter Display"
+  }
+}

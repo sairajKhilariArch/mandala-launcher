@@ -2,12 +2,15 @@ import { ThemePalette } from "theme_tokens.slint";
 
 // One rendered panel position or All-Apps row: an app (id set) or an empty
 // holder (placeholder). `icon` is a monogram glyph computed in Rust — no
-// image assets, consistent with the text-first design.
+// image assets, consistent with the text-first design. `accent` is the
+// app's own theme colour (derived per id in Rust), so every installed app
+// keeps a stable identity across themes.
 export struct SlotItem {
     id: string,
     label: string,
     icon: string,
     placeholder: bool,
+    accent: color,
 }
 
 // One row of the module-store overlay. `status` is pre-rendered by the
@@ -29,6 +32,7 @@ export component SlotButton inherits Rectangle {
     in property <string> icon;
     in property <string> label;
     in property <bool> placeholder: false;
+    in property <color> accent: ThemePalette.accent-focus;
     callback activated();
     callback open-store();
 
@@ -55,7 +59,7 @@ export component SlotButton inherits Rectangle {
 
             Text {
                 text: root.placeholder ? "+" : root.icon;
-                color: root.placeholder ? ThemePalette.text-secondary : ThemePalette.accent-focus;
+                color: root.placeholder ? ThemePalette.text-secondary : root.accent;
                 font-family: ThemePalette.font-family;
                 font-size: 14px;
                 horizontal-alignment: center;
@@ -90,6 +94,7 @@ export component RailTile inherits Rectangle {
     in property <string> icon;
     in property <string> label;
     in property <bool> placeholder: false;
+    in property <color> accent: ThemePalette.accent-focus;
     callback activated();
     callback open-store();
 
@@ -110,7 +115,7 @@ export component RailTile inherits Rectangle {
 
         Text {
             text: root.placeholder ? "+" : root.icon;
-            color: root.placeholder ? ThemePalette.text-secondary : ThemePalette.accent-focus;
+            color: root.placeholder ? ThemePalette.text-secondary : root.accent;
             font-family: ThemePalette.font-family;
             font-size: 15px;
             horizontal-alignment: center;
@@ -135,6 +140,7 @@ export component SlotRow inherits Rectangle {
     in property <string> icon;
     in property <string> label;
     in property <bool> placeholder: false;
+    in property <color> accent: ThemePalette.accent-focus;
     callback activated();
     callback open-store();
 
@@ -158,7 +164,7 @@ export component SlotRow inherits Rectangle {
 
             Text {
                 text: root.placeholder ? "+" : root.icon;
-                color: root.placeholder ? ThemePalette.text-secondary : ThemePalette.accent-focus;
+                color: root.placeholder ? ThemePalette.text-secondary : root.accent;
                 font-family: ThemePalette.font-family;
                 font-size: 14px;
                 horizontal-alignment: center;
@@ -190,17 +196,19 @@ export component SlotRow inherits Rectangle {
 
 export component ActionButton inherits Rectangle {
     in property <string> text;
+    // Primary actions (install, exit) carry the theme's CTA colour.
+    in property <bool> primary: false;
     callback clicked();
 
     height: 48px;
-    background: touch.pressed ? ThemePalette.surface-border : ThemePalette.surface-primary;
+    background: touch.pressed ? ThemePalette.surface-border : (root.primary ? ThemePalette.cta-accent : ThemePalette.surface-primary);
     border-radius: ThemePalette.corner-radius;
     border-width: ThemePalette.border-width;
     border-color: ThemePalette.surface-border;
 
     Text {
         text: root.text;
-        color: ThemePalette.text-primary;
+        color: root.primary ? ThemePalette.canvas-bg : ThemePalette.text-primary;
         font-family: ThemePalette.font-family;
         font-size: 12px;
         horizontal-alignment: center;

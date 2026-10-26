@@ -12,6 +12,35 @@ fn color(c: Rgba) -> Color {
     Color::from_argb_u8(c.a, c.r, c.g, c.b)
 }
 
+/// Deterministic accent per module id: the same app keeps the same colour
+/// across runs, panels and themes ("every app has its own theme"). Hue is
+/// spread with the golden ratio so sibling ids land far apart.
+fn brand_accent(id: &str) -> Color {
+    let h = id
+        .bytes()
+        .fold(5381u32, |a, b| (a.wrapping_mul(33)) ^ b as u32);
+    let hue = (h % 360) as f32;
+    let (r, g, b) = hsl_to_rgb(hue, 0.62, 0.66);
+    Color::from_argb_u8(255, r, g, b)
+}
+
+fn hsl_to_rgb(h: f32, s: f32, l: f32) -> (u8, u8, u8) {
+    let c = (1.0 - (2.0 * l - 1.0).abs()) * s;
+    let hp = h / 60.0;
+    let x = c * (1.0 - ((hp % 2.0) - 1.0).abs());
+    let (r, g, b) = match hp as u32 {
+        0 => (c, x, 0.0),
+        1 => (x, c, 0.0),
+        2 => (0.0, c, x),
+        3 => (0.0, x, c),
+        4 => (x, 0.0, c),
+        _ => (c, 0.0, x),
+    };
+    let m = l - c / 2.0;
+    let conv = |v: f32| ((v + m) * 255.0).round() as u8;
+    (conv(r), conv(g), conv(b))
+}
+
 fn slot_items(composed: &[PanelSlot]) -> Vec<SlotItem> {
     composed
         .iter()
@@ -20,6 +49,7 @@ fn slot_items(composed: &[PanelSlot]) -> Vec<SlotItem> {
             label: s.label.as_str().into(),
             icon: slots::glyph_for(&s.label).as_str().into(),
             placeholder: s.placeholder,
+            accent: brand_accent(&s.id),
         })
         .collect()
 }
@@ -48,6 +78,7 @@ fn app_rows(installed: &[String]) -> Vec<SlotItem> {
         label: "Store".into(),
         icon: "S".into(),
         placeholder: false,
+        accent: brand_accent("store"),
     }];
     let mut mods: Vec<(String, String)> = installed
         .iter()
@@ -59,6 +90,7 @@ fn app_rows(installed: &[String]) -> Vec<SlotItem> {
         id: id.as_str().into(),
         label: label.as_str().into(),
         placeholder: false,
+        accent: brand_accent(&id),
     }));
     rows
 }
@@ -110,6 +142,7 @@ pub fn apply_theme(ui: &MainWindow, t: &ResolvedTheme) {
     p.set_text_primary(color(t.text_primary));
     p.set_text_secondary(color(t.text_secondary));
     p.set_accent_focus(color(t.accent_focus));
+    p.set_cta_accent(color(t.cta_accent));
     p.set_border_width(t.border_width_px);
     p.set_corner_radius(t.corner_radius_px);
     p.set_font_family(SharedString::from(t.font_family.as_str()));

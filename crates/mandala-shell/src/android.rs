@@ -51,6 +51,16 @@ fn check_exception(env: &mut JNIEnv<'_>) -> Result<(), String> {
     Ok(())
 }
 
+/// Close the Mandala activity, returning the user to the Android launcher.
+/// The shell's only exit path (the bottom-left Exit button) ends here.
+pub fn finish_activity() -> Result<(), String> {
+    with_activity(|env, activity| {
+        env.call_method(activity, "finish", "()V", &[])
+            .map_err(|e| format!("exit: {e}"))?;
+        Ok(())
+    })
+}
+
 /// Replace the system wallpaper with a local image file.
 pub fn set_wallpaper(path: &Path) -> Result<(), String> {
     let path = path

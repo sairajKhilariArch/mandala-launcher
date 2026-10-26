@@ -4,6 +4,7 @@ use crate::error::{MandalaError, Result};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
+pub const PRESET_AURORA: &str = include_str!("../../../themes/aurora-slate.json");
 pub const PRESET_OLED: &str = include_str!("../../../themes/minimalist-oled.json");
 pub const PRESET_CEL: &str = include_str!("../../../themes/cel-shaded.json");
 pub const PRESET_RETRO: &str = include_str!("../../../themes/retro-terminal.json");
@@ -27,6 +28,10 @@ pub struct ThemeTokens {
     pub text_primary: String,
     pub text_secondary: String,
     pub accent_focus: String,
+    /// Colour of primary-action buttons; themes without it fall back to the
+    /// trending orange so older user themes stay valid.
+    #[serde(default = "default_cta")]
+    pub cta_accent: String,
     #[serde(default)]
     pub border_width_px: f32,
     #[serde(default = "default_radius")]
@@ -37,6 +42,9 @@ pub struct ThemeTokens {
 
 fn default_radius() -> f32 {
     4.0
+}
+fn default_cta() -> String {
+    "#F97316".into()
 }
 fn default_font() -> String {
     "Inter".into()
@@ -100,6 +108,7 @@ pub struct ResolvedTheme {
     pub text_primary: Rgba,
     pub text_secondary: Rgba,
     pub accent_focus: Rgba,
+    pub cta_accent: Rgba,
     pub border_width_px: f32,
     pub corner_radius_px: f32,
     pub font_family: String,
@@ -134,6 +143,7 @@ impl ThemeManifest {
             text_primary: Rgba::parse(&t.text_primary)?,
             text_secondary: Rgba::parse(&t.text_secondary)?,
             accent_focus: Rgba::parse(&t.accent_focus)?,
+            cta_accent: Rgba::parse(&t.cta_accent)?,
             border_width_px: t.border_width_px,
             corner_radius_px: t.corner_radius_px,
             font_family: t.font_family.clone(),
@@ -150,7 +160,7 @@ pub struct ThemeManager {
 impl ThemeManager {
     /// Built-in presets (first one is the default).
     pub fn with_presets() -> Self {
-        let themes = [PRESET_OLED, PRESET_CEL, PRESET_RETRO]
+        let themes = [PRESET_AURORA, PRESET_OLED, PRESET_CEL, PRESET_RETRO]
             .iter()
             .map(|j| {
                 ThemeManifest::from_json(j)
@@ -245,23 +255,37 @@ mod tests {
         let m = ThemeManager::with_presets();
         assert_eq!(
             m.ids(),
-            ["minimalist-oled-dark", "cel-shaded", "retro-terminal"]
+            [
+                "aurora-slate-dark",
+                "minimalist-oled-dark",
+                "cel-shaded",
+                "retro-terminal"
+            ]
         );
         assert_eq!(
             m.current().canvas_bg,
             Rgba {
-                r: 0,
-                g: 0,
-                b: 0,
+                r: 0x0B,
+                g: 0x0F,
+                b: 0x14,
                 a: 255
             }
         );
         assert_eq!(
             m.current().accent_focus,
             Rgba {
-                r: 0xD4,
-                g: 0xA3,
-                b: 0x73,
+                r: 0x2D,
+                g: 0xD4,
+                b: 0xBF,
+                a: 255
+            }
+        );
+        assert_eq!(
+            m.current().cta_accent,
+            Rgba {
+                r: 0xF9,
+                g: 0x73,
+                b: 0x16,
                 a: 255
             }
         );
@@ -289,10 +313,13 @@ mod tests {
         let mut m = ThemeManager::with_presets();
         assert_eq!(m.select("cel").unwrap().id, "cel-shaded");
         assert_eq!(m.select("next").unwrap().id, "retro-terminal");
-        assert_eq!(m.select("next").unwrap().id, "minimalist-oled-dark");
+        assert_eq!(m.select("next").unwrap().id, "aurora-slate-dark");
         assert!(m.select("nope").is_err());
         // "c" is only a prefix of one theme id; "r" likewise; "m" likewise
         assert_eq!(m.select("r").unwrap().id, "retro-terminal");
+        // Themes without the cta token fall back to the default orange.
+        let m = ThemeManifest::from_json(PRESET_OLED).unwrap();
+        assert_eq!(m.resolve().unwrap().cta_accent.r, 0xF9);
     }
 
     #[test]

@@ -145,6 +145,12 @@ pub enum Action {
     /// User pressed a button on the process monitor.
     MonitorUnloadAll,
     MonitorRestartAll,
+    /// Back key (Android system back, or desktop Escape): closest overlay,
+    /// else the open app, else a no-op. The shell itself never exits here.
+    Back,
+    /// The explicit exit button (bottom-left of home): the only path that
+    /// closes Mandala itself.
+    ExitShell,
     /// The Store overlay was opened (`store` command or Refresh).
     StoreOpen,
     /// A freshly fetched (or cached) catalog arrived; rows carry the
@@ -190,6 +196,9 @@ pub enum Effect {
     InstallModule {
         id: String,
     },
+    /// Close the whole launcher: finish the Android activity (back to the
+    /// system launcher) or quit the desktop event loop.
+    ExitPlatform,
 }
 
 pub fn reduce(state: &mut AppState, action: Action) -> Vec<Effect> {
@@ -237,6 +246,28 @@ pub fn reduce(state: &mut AppState, action: Action) -> Vec<Effect> {
             state.monitor_open = false;
             state.store_open = false;
             state.apps_open = false;
+        }
+
+        Action::Back => {
+            let any_overlay = state.left_open
+                || state.right_open
+                || state.monitor_open
+                || state.store_open
+                || state.apps_open;
+            if any_overlay {
+                return reduce(state, Action::CloseOverlays);
+            }
+            if state.active_module.is_some() {
+                // Same as the home SwipeUp gesture: back closes the app, the
+                // shell stays alive.
+                state.active_module = None;
+                state.canvas_text = HOME_HINT.to_string();
+            }
+            // At home: no-op. The shell is only closed by the Exit button.
+        }
+
+        Action::ExitShell => {
+            fx.push(Effect::ExitPlatform);
         }
 
         Action::InstalledChanged(ids) => {
@@ -594,6 +625,35 @@ mod tests {
         let before = s.clone();
         assert!(reduce(&mut s, Action::Gesture(Gesture::SystemBackPassthrough)).is_empty());
         assert_eq!(s, before);
+    }
+
+    #[test]
+    fn back_closes_overlays_then_app_then_noops() {
+        // Overlay open: back falls one level to home.
+        let mut s = st();
+        s.store_open = true;
+        reduce(&mut s, Action::Back);
+        assert!(!s.store_open);
+        // App open: back closes the app, the shell survives.
+        s.active_module = Some("app-notes".into());
+        s.canvas_text = "notes".into();
+        reduce(&mut s, Action::Back);
+        assert_eq!(s.active_module, None);
+        assert_eq!(s.canvas_text, HOME_HINT);
+        // At home: back is a no-op — the shell never exits from back.
+        let before = s.clone();
+        reduce(&mut s, Action::Back);
+        assert_eq!(s, before);
+    }
+
+    #[test]
+    fn exit_shell_is_the_only_exit_path() {
+        let mut s = st();
+        s.left_open = true;
+        assert_eq!(
+            reduce(&mut s, Action::ExitShell),
+            vec![Effect::ExitPlatform]
+        );
     }
 
     #[test]

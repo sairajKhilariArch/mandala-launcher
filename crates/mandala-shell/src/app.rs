@@ -193,6 +193,17 @@ impl App {
                 self.dispatch(Action::InstalledChanged(installed));
                 self.dispatch(Action::StoreInstallDone { ok, msg, rows });
             }
+            Effect::ExitPlatform => {
+                // The only path that closes Mandala itself (the Exit button):
+                // on Android finish the activity (back to the system launcher),
+                // on desktop quit the event loop. Safe from any thread.
+                #[cfg(target_os = "android")]
+                if let Err(e) = crate::android::finish_activity() {
+                    log::error!("exit: {e}");
+                }
+                #[cfg(not(target_os = "android"))]
+                let _ = slint::quit_event_loop();
+            }
         }
     }
 

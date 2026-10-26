@@ -50,6 +50,10 @@ export component MainWindow inherits Window {
     callback monitor-restart-all();
     callback store-install(string);
     callback store-refresh();
+    // Back key: closes the nearest overlay, else the open app; never exits.
+    callback back();
+    // The bottom-left Exit button: the only path that closes the shell.
+    callback exit-shell();
 
     property <bool> expanded: root.width >= 840px;
     property <length> drawer-w: root.expanded ? 320px : 280px;
@@ -70,6 +74,22 @@ export component MainWindow inherits Window {
         root.resized(root.width / 1px);
     }
 
+    // Escape (and, on Android, the system back key, which slint delivers the
+    // same way) walks back one level. Two scopes cover every focus state:
+    // this one holds focus whenever no other element does (init), and the
+    // workspace scope below catches Escape rejected by the text input.
+    back_idle := FocusScope {
+        init => { self.focus(); }
+        key-pressed(e) => {
+            if e.text == "\\e" {
+                root.back();
+                accept
+            } else {
+                reject
+            }
+        }
+    }
+
     // Bottom-most layer: raw pointer capture for the gesture engine.
     TouchArea {
         pointer-event(event) => {
@@ -81,7 +101,17 @@ export component MainWindow inherits Window {
         }
     }
 
-    // Centre workspace.
+    // Centre workspace. FocusScope so Escape rejected by the query input
+    // (which never consumes it) still bubbles into the back handler.
+    workspace_keys := FocusScope {
+        key-pressed(e) => {
+            if e.text == "\\e" {
+                root.back();
+                accept
+            } else {
+                reject
+            }
+        }
     VerticalLayout {
         padding-left: root.app-open ? 24px : (root.expanded ? root.drawer-w + 24px : (root.rails-visible ? root.rail-w + 16px : 24px));
         padding-right: root.app-open ? 24px : (root.expanded ? root.drawer-w + 24px : (root.rails-visible ? root.rail-w + 16px : 24px));
@@ -144,10 +174,12 @@ export component MainWindow inherits Window {
                 icon: slot.icon;
                 label: slot.label;
                 placeholder: slot.placeholder;
+                accent: slot.accent;
                 activated => { root.slot-activated(slot.id); }
                 open-store => { root.open-store(); }
             }
         }
+    }
     }
 
     // Left rail: always-visible app holders on phone widths.
@@ -162,14 +194,22 @@ export component MainWindow inherits Window {
         VerticalLayout {
             padding: 8px;
             padding-top: 96px;
+            padding-bottom: 8px;
             spacing: 6px;
-            alignment: start;
             for slot in root.panel-b: RailTile {
                 icon: slot.icon;
                 label: slot.label;
                 placeholder: slot.placeholder;
+                accent: slot.accent;
                 activated => { root.slot-activated(slot.id); }
                 open-store => { root.open-store(); }
+            }
+            Rectangle { vertical-stretch: 1; }
+            // The only exit of the whole shell, pinned bottom-left of home.
+            ActionButton {
+                text: "EXIT";
+                primary: true;
+                clicked => { root.exit-shell(); }
             }
         }
     }
@@ -192,6 +232,7 @@ export component MainWindow inherits Window {
                 icon: slot.icon;
                 label: slot.label;
                 placeholder: slot.placeholder;
+                accent: slot.accent;
                 activated => { root.slot-activated(slot.id); }
                 open-store => { root.open-store(); }
             }
@@ -232,10 +273,17 @@ export component MainWindow inherits Window {
                 icon: slot.icon;
                 label: slot.label;
                 placeholder: slot.placeholder;
+                accent: slot.accent;
                 activated => { root.slot-activated(slot.id); }
                 open-store => { root.open-store(); }
             }
             Rectangle { vertical-stretch: 1; }
+            // Same exit affordance on the docked/open drawer (expanded layout).
+            ActionButton {
+                text: "EXIT";
+                primary: true;
+                clicked => { root.exit-shell(); }
+            }
         }
     }
 
@@ -257,6 +305,7 @@ export component MainWindow inherits Window {
                 icon: slot.icon;
                 label: slot.label;
                 placeholder: slot.placeholder;
+                accent: slot.accent;
                 activated => { root.slot-activated(slot.id); }
                 open-store => { root.open-store(); }
             }
@@ -301,6 +350,7 @@ export component MainWindow inherits Window {
                         icon: row.icon;
                         label: row.label;
                         placeholder: row.placeholder;
+                        accent: row.accent;
                         activated => { root.app-activated(row.id); }
                         open-store => { root.open-store(); }
                     }
@@ -423,6 +473,7 @@ export component MainWindow inherits Window {
                             if item.actionable: ActionButton {
                                 width: 110px;
                                 text: item.status;
+                                primary: true;
                                 clicked => { root.store-install(item.id); }
                             }
                             if !item.actionable: Text {
