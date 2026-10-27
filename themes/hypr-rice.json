@@ -1,0 +1,19 @@
+{
+  "theme_id": "hypr-rice",
+  "theme_name": "Hypr Rice",
+  "version": "1.0.0",
+  "author": "Mandala Team",
+  "tokens": {
+    "canvas_bg": "#0B0D17",
+    "surface_primary": "#151827CC",
+    "surface_border": "#7C83FF4D",
+    "text_primary": "#E8EAFF",
+    "text_secondary": "#9AA0C3",
+    "accent_focus": "#7C83FF",
+    "cta_accent": "#7C83FF",
+    "on_cta": "#0B0D17",
+    "border_width_px": 1,
+    "corner_radius_px": 10,
+    "font_family": "Inter"
+  }
+}

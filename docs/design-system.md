@@ -72,7 +72,10 @@ window default 412×915.
 * **Focus:** the command input shows `accent_focus` as its border.
 * **Disabled/placeholder:** empty slots render at reduced opacity and open
   the Store instead of firing.
-* **Timing:** drawer slide 180ms ease-out; nothing else animates.
+* **Timing:** 180ms ease-out for motion with direction (workspace glide on
+  open/close, drawer/rail slides), 150ms ease-out for opacity fades
+  (overlay scrim + panels). Transform/opacity only — geometry animates via
+  layout padding and `x`, never width/height.
 * **Keyboard:** Tab / Shift+Tab walk the focus chain — command bar first,
   then every visible control (Slint's window-level focus loop; the root
   scopes opt out so no invisible stops exist). Enter or Space activates the
@@ -85,10 +88,46 @@ window default 412×915.
   this phase (caught by `tests/tab_focus.rs`).
   `shortcut:` Escape while a *control* has focus bubbles to the window and
   is dropped there; close overlays with Tab + Enter on the CLOSE button.
+* **Shortcuts (rice):** Ctrl+Space focuses the command bar (the rofi /
+  SUPER+D launcher role), Ctrl+T opens the Terminal. Both are chords, so
+  they bubble past the focused input and any focused button without
+  "clicking" it (buttons reject modifier chords; plain Space still
+  activates). Covered by `tests/shortcuts.rs`.
+  `shortcut:` Ctrl+Return is *not* wired: Slint's single-line TextInput
+  consumes Return (fires `accepted`) before window scopes see it, so it
+  could only work outside the command bar — Ctrl+T works from every focus
+  state instead.
 
 Touch targets: every control is ≥44px in its smallest dimension
 (`Scale.touch-min`); inputs and buttons are 48px (`Scale.control-height`),
 rail tiles 56px, rows 52px.
+
+## Rice layer
+
+The rice (hyprdots-style) layer sits on top of the themed shell and is
+driven by one command, `wallpaper <path>`:
+
+* **Derived palette.** `crates/mandala-core/src/palette.rs` thumbs the
+  image to 64px, builds a 4096-bucket histogram, picks the most frequent
+  *saturated* bucket (flat/grey wallpapers fall back to plain frequency)
+  and turns it into an ordinary manifest (`themes/wallpaper-derived.json`):
+  accent and CTA fill = the wallpaper's colour, canvas forced near-black,
+  glass surfaces a tint of the accent, CTA label chosen by whichever of
+  dark/light scores better in WCAG contrast. The manifest resolves through
+  `ThemeManifest::resolve()` before it is written, so a bad derivation
+  fails the command instead of shipping an unloadable theme; the
+  `palette.rs` tests assert ≥4.5:1 for body text, secondary text and the
+  CTA label on the derived theme.
+* **Wallpaper surface.** The shell draws the image itself (`Image`,
+  `image-fit: cover`, behind everything, `has-wallpaper`-gated) so the
+  glass panels have something to sit on. The path persists in
+  `wallpaper.path`; palette and image both restore on the next boot. On
+  Android the same command also sets the *system* wallpaper via JNI
+  (`shell/android.rs::set_wallpaper`).
+* **Status bar.** A waybar-style row of `BarPill`s: active theme, install
+  count, live clock (`%a %H:%M`, one `slint::Timer` tick per second).
+  Status only — no pointer targets — themed through `Scale` and
+  `ThemePalette` like everything else.
 
 ## Accessibility
 

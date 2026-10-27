@@ -126,6 +126,25 @@ pub fn render(ui: &MainWindow, st: &AppState) {
     // Panels are app holders: recompose when the installed set changed (boot
     // scan, store install). Cheap (15 composed slots).
     populate_slots(ui, &st.installed);
+    // waybar status pill values — all real state, no invented indicators.
+    ui.set_bar_context(
+        if let Some(id) = &st.active_module {
+            slots::label_for(id)
+        } else {
+            "home".to_string()
+        }
+        .into(),
+    );
+    ui.set_bar_theme(st.theme_id.as_str().into());
+    let n = st.installed.len();
+    ui.set_bar_apps(
+        (if n == 1 {
+            "1 app".to_string()
+        } else {
+            format!("{n} apps")
+        })
+        .into(),
+    );
     // Only touch the input when the state diverged (e.g. cleared on submit);
     // rewriting identical text would disturb the cursor while typing.
     if ui.get_query().as_str() != st.query {

@@ -1,0 +1,19 @@
+{
+  "theme_id": "kitty",
+  "theme_name": "Kitty",
+  "version": "1.0.0",
+  "author": "Mandala Team",
+  "tokens": {
+    "canvas_bg": "#000000",
+    "surface_primary": "#171717",
+    "surface_border": "#3A3A3A",
+    "text_primary": "#FFFFFF",
+    "text_secondary": "#A0A0A0",
+    "accent_focus": "#00AFFF",
+    "cta_accent": "#00AFFF",
+    "on_cta": "#000000",
+    "border_width_px": 1,
+    "corner_radius_px": 6,
+    "font_family": "monospace"
+  }
+}

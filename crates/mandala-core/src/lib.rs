@@ -10,6 +10,7 @@
 //! * [`command`]  – fuzzy search and command grammar
 //! * [`slots`]    – the 15-slot tri-panel matrix
 //! * [`theme`]    – JSON theme manifests and presets
+//! * [`palette`]  – wallpaper -> accent palette derivation (pywal-style)
 //! * [`paths`]    – on-disk layout
 //! * [`sys`]      – process RSS introspection (performance budget)
 //! * [`catalog`]  – module store registry format and validation
@@ -21,6 +22,7 @@ pub mod error;
 pub mod gesture;
 pub mod ipc_bus;
 pub mod loader;
+pub mod palette;
 pub mod paths;
 pub mod router;
 pub mod scheduler;

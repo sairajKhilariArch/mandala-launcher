@@ -101,7 +101,9 @@ export component SlotButton inherits Rectangle {
     fs := FocusScope {
         enabled: root.focusable;
         key-pressed(e) => {
-            if (e.text == "\n" || e.text == " ") {
+            // Modifier chords bubble to the window (Ctrl+Space, Ctrl+T);
+            // only a bare Enter/Space activates the control.
+            if (e.text == "\n" || e.text == " ") && !e.modifiers.control && !e.modifiers.alt && !e.modifiers.meta {
                 root.trigger();
                 accept
             } else {
@@ -163,7 +165,7 @@ export component RailTile inherits Rectangle {
     fs := FocusScope {
         enabled: root.focusable;
         key-pressed(e) => {
-            if (e.text == "\n" || e.text == " ") {
+            if (e.text == "\n" || e.text == " ") && !e.modifiers.control && !e.modifiers.alt && !e.modifiers.meta {
                 root.trigger();
                 accept
             } else {
@@ -238,7 +240,7 @@ export component SlotRow inherits Rectangle {
     fs := FocusScope {
         enabled: root.focusable;
         key-pressed(e) => {
-            if (e.text == "\n" || e.text == " ") {
+            if (e.text == "\n" || e.text == " ") && !e.modifiers.control && !e.modifiers.alt && !e.modifiers.meta {
                 root.trigger();
                 accept
             } else {
@@ -277,7 +279,7 @@ export component ActionButton inherits Rectangle {
     fs := FocusScope {
         enabled: root.focusable;
         key-pressed(e) => {
-            if (e.text == "\n" || e.text == " ") {
+            if (e.text == "\n" || e.text == " ") && !e.modifiers.control && !e.modifiers.alt && !e.modifiers.meta {
                 root.clicked();
                 accept
             } else {
@@ -288,5 +290,33 @@ export component ActionButton inherits Rectangle {
 
     touch := TouchArea {
         clicked => { root.clicked(); }
+    }
+}
+
+// Status-bar pill (waybar module): a small chip with one line of live text.
+// No pointer handling and never in the Tab loop — the bar is status only.
+export component BarPill inherits Rectangle {
+    in property <string> text;
+    // Accent outline marks the theme pill (border = non-text contrast only).
+    in property <bool> accent: false;
+
+    height: Scale.bar-height - (Scale.space-1 * 2);
+    background: ThemePalette.canvas-bg;
+    border-radius: ThemePalette.corner-radius;
+    border-width: ThemePalette.border-width;
+    border-color: root.accent ? ThemePalette.accent-focus : ThemePalette.surface-border;
+
+    HorizontalLayout {
+        padding-left: Scale.space-2;
+        padding-right: Scale.space-2;
+        Text {
+            text: root.text;
+            color: ThemePalette.text-primary;
+            font-family: ThemePalette.font-family;
+            font-size: Scale.font-caption;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            overflow: elide;
+        }
     }
 }

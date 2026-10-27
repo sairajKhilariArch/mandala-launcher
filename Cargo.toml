@@ -25,6 +25,7 @@ authors = ["Mandala Team"]
 anyhow = "1"
 ed25519-dalek = { version = "2", features = ["rand_core"] }
 hex = "0.4"
+image = "0.25"
 libloading = "0.8"
 log = "0.4"
 env_logger = "0.11"

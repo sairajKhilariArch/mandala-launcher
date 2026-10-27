@@ -138,17 +138,73 @@ impl App {
                 log::info!("restart: dropped {n} module(s), cleared quarantine verdicts");
             }
             Effect::SetWallpaper(path) => {
+                let paths = self.host.paths();
+                let p = std::path::PathBuf::from(&path);
+                // Android also flips the *system* wallpaper behind us; both
+                // platforms derive the palette and repaint the shell's own
+                // background from the same file.
                 #[cfg(target_os = "android")]
-                let message = match crate::android::set_wallpaper(std::path::Path::new(&path)) {
-                    Ok(()) => "Wallpaper updated.".to_string(),
-                    Err(e) => format!("wallpaper: {e}"),
+                let sys = match crate::android::set_wallpaper(&p) {
+                    Ok(()) => ", system wallpaper set".to_string(),
+                    Err(e) => format!(", system wallpaper failed: {e}"),
                 };
                 #[cfg(not(target_os = "android"))]
-                let message = {
-                    let _ = path;
-                    "wallpaper: Android only — on desktop the OS owns the background.".to_string()
+                let sys = String::new();
+                if !p.is_file() {
+                    self.notice(format!("wallpaper: no such file `{path}`"));
+                    return;
+                }
+                let manifest = match mandala_core::palette::derive_manifest(&p) {
+                    Ok(m) => m,
+                    Err(e) => {
+                        self.notice(e.to_string());
+                        return;
+                    }
                 };
-                self.dispatch(Action::Notice(message));
+                // Persist both halves: the derived manifest (loaded by the
+                // normal theme scan on next boot) and the path (background).
+                let dir = paths.themes_dir();
+                // String-only JSON: serialisation cannot fail.
+                let json =
+                    serde_json::to_string_pretty(&manifest).expect("derived manifest serialises");
+                let wrote = std::fs::create_dir_all(&dir).and_then(|()| {
+                    std::fs::write(
+                        dir.join(format!("{}.json", mandala_core::palette::DERIVED_ID)),
+                        json,
+                    )
+                });
+                let wrote =
+                    wrote.and_then(|()| std::fs::write(paths.root.join("wallpaper.path"), &path));
+                if let Err(e) = wrote {
+                    self.notice(format!("wallpaper: {e}"));
+                    return;
+                }
+                let picked = {
+                    let mut tm = lock(&self.themes);
+                    for w in tm.load_user_dir(&dir) {
+                        log::warn!("theme skipped: {w}");
+                    }
+                    tm.select(mandala_core::palette::DERIVED_ID).cloned()
+                };
+                match picked {
+                    Ok(theme) => {
+                        let id = theme.id.clone();
+                        let weak = lock(&self.ui).clone();
+                        let img_path = p.clone();
+                        let _ = weak.upgrade_in_event_loop(move |ui| {
+                            if let Ok(img) = slint::Image::load_from_path(&img_path) {
+                                ui.set_wallpaper_image(img);
+                                ui.set_has_wallpaper(true);
+                            }
+                            mandala_ui::apply_theme(&ui, &theme);
+                        });
+                        self.dispatch(Action::ThemeApplied { id });
+                        self.notice(format!(
+                            "wallpaper: `{path}` applied — palette derived from it{sys}"
+                        ));
+                    }
+                    Err(e) => self.notice(format!("wallpaper: {e}")),
+                }
             }
             Effect::RequestOverlay => {
                 #[cfg(target_os = "android")]

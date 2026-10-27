@@ -9,6 +9,8 @@ pub const PRESET_AURORA: &str = include_str!("../../../themes/aurora-slate.json"
 pub const PRESET_OLED: &str = include_str!("../../../themes/minimalist-oled.json");
 pub const PRESET_CEL: &str = include_str!("../../../themes/cel-shaded.json");
 pub const PRESET_RETRO: &str = include_str!("../../../themes/retro-terminal.json");
+pub const PRESET_HYPR: &str = include_str!("../../../themes/hypr-rice.json");
+pub const PRESET_KITTY: &str = include_str!("../../../themes/kitty.json");
 
 /// Per-app theme presets: shown while that module is the active view.
 pub const APP_PRESET_TERMINAL: &str = include_str!("../../../themes/apps/app-terminal.json");
@@ -198,14 +200,21 @@ pub struct ThemeManager {
 impl ThemeManager {
     /// Built-in presets (first one is the default).
     pub fn with_presets() -> Self {
-        let themes = [PRESET_AURORA, PRESET_OLED, PRESET_CEL, PRESET_RETRO]
-            .iter()
-            .map(|j| {
-                ThemeManifest::from_json(j)
-                    .and_then(|m| m.resolve())
-                    .expect("built-in theme must be valid")
-            })
-            .collect();
+        let themes = [
+            PRESET_AURORA,
+            PRESET_OLED,
+            PRESET_CEL,
+            PRESET_RETRO,
+            PRESET_HYPR,
+            PRESET_KITTY,
+        ]
+        .iter()
+        .map(|j| {
+            ThemeManifest::from_json(j)
+                .and_then(|m| m.resolve())
+                .expect("built-in theme must be valid")
+        })
+        .collect();
         let apps = [
             ("app-terminal", APP_PRESET_TERMINAL),
             ("app-camera", APP_PRESET_CAMERA),
@@ -406,7 +415,9 @@ mod tests {
                 "aurora-slate-dark",
                 "minimalist-oled-dark",
                 "cel-shaded",
-                "retro-terminal"
+                "retro-terminal",
+                "hypr-rice",
+                "kitty"
             ]
         );
         assert_eq!(
@@ -460,9 +471,12 @@ mod tests {
         let mut m = ThemeManager::with_presets();
         assert_eq!(m.select("cel").unwrap().id, "cel-shaded");
         assert_eq!(m.select("next").unwrap().id, "retro-terminal");
+        assert_eq!(m.select("next").unwrap().id, "hypr-rice");
+        assert_eq!(m.select("next").unwrap().id, "kitty");
+        // Wraps back to the first preset (the default).
         assert_eq!(m.select("next").unwrap().id, "aurora-slate-dark");
         assert!(m.select("nope").is_err());
-        // "c" is only a prefix of one theme id; "r" likewise; "m" likewise
+        // "r" is only a prefix of one theme id
         assert_eq!(m.select("r").unwrap().id, "retro-terminal");
         // Themes without the cta token fall back to the default orange.
         let m = ThemeManifest::from_json(PRESET_OLED).unwrap();
@@ -600,6 +614,8 @@ mod tests {
             PRESET_OLED,
             PRESET_CEL,
             PRESET_RETRO,
+            PRESET_HYPR,
+            PRESET_KITTY,
             APP_PRESET_TERMINAL,
             APP_PRESET_CAMERA,
             APP_PRESET_NOTES,

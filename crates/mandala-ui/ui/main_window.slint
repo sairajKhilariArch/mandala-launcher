@@ -1,5 +1,5 @@
 import { ThemePalette, Scale, Responsive } from "theme_tokens.slint";
-import { SlotItem, SlotButton, RailTile, SlotRow, StoreItem, ActionButton } from "components.slint";
+import { SlotItem, SlotButton, RailTile, SlotRow, StoreItem, ActionButton, BarPill } from "components.slint";
 
 export { ThemePalette, Responsive, SlotItem, StoreItem }
 
@@ -36,6 +36,14 @@ export component MainWindow inherits Window {
     in property <[SlotItem]> app-rows;
     in property <string> store-status;
     in-out property <string> query;
+    // Rice layer: wallpaper background + waybar status fields. All values
+    // come from real state (context, active theme, install count, clock).
+    in property <image> wallpaper-image;
+    in property <bool> has-wallpaper: false;
+    in property <string> bar-context: "home";
+    in property <string> bar-theme;
+    in property <string> bar-apps;
+    in property <string> bar-clock;
 
     callback slot-activated(string);
     callback app-activated(string);
@@ -67,12 +75,14 @@ export component MainWindow inherits Window {
     // Tab-loop gates: controls hidden behind a modal overlay or an open
     // drawer drop out of the focus chain — the ring would land where
     // nothing can be seen. Drawers docked (expanded) never cover the
-    // workspace, so the workspace gate passes there.
+    // workspace, so the workspace gate passes there. Rails/drawers stay
+    // mounted for their slide animations, so their gates also carry the
+    // app-open/visibility state their old `if` used to provide.
     property <bool> workspace-focus: !root.overlay-open && (root.expanded || (!root.left-open && !root.right-open));
-    property <bool> left-rail-focus: !root.overlay-open && !root.left-open;
-    property <bool> right-rail-focus: !root.overlay-open && !root.right-open;
-    property <bool> left-drawer-focus: root.left-visible && !root.overlay-open;
-    property <bool> right-drawer-focus: root.right-visible && !root.overlay-open;
+    property <bool> left-rail-focus: root.rails-visible && !root.overlay-open && !root.left-open;
+    property <bool> right-rail-focus: root.rails-visible && !root.overlay-open && !root.right-open;
+    property <bool> left-drawer-focus: root.left-visible && !root.overlay-open && !root.app-open;
+    property <bool> right-drawer-focus: root.right-visible && !root.overlay-open && !root.app-open;
 
     init => {
         Responsive.window-width = root.width;
@@ -81,6 +91,18 @@ export component MainWindow inherits Window {
     changed width => {
         Responsive.window-width = root.width;
         root.resized(root.width / 1px);
+    }
+
+    // Rice wallpaper: the surface the glass panels sit on. Hidden until a
+    // wallpaper path is set (the opaque canvas-bg shows through underneath).
+    Image {
+        visible: root.has-wallpaper;
+        source: root.wallpaper-image;
+        x: 0px;
+        y: 0px;
+        width: root.width;
+        height: root.height;
+        image-fit: cover;
     }
 
     // Escape (and, on Android, the system back key, which slint delivers the
@@ -95,6 +117,20 @@ export component MainWindow inherits Window {
         key-pressed(e) => {
             if e.text == "\u{1b}" {
                 root.back();
+                accept
+            } else if e.modifiers.control && e.text == " " {
+                // Ctrl+Space: the rofi/SUPER+D launcher role — jump to the
+                // command bar (workspace only; overlays keep their focus).
+                if root.workspace-focus {
+                    input.focus();
+                }
+                accept
+            } else if e.modifiers.control && (e.text == "t" || e.text == "T") {
+                // Ctrl+T: the terminal, straight from anywhere on the
+                // workspace (same slot path as tapping the dock tile).
+                if root.workspace-focus {
+                    root.slot-activated("app-terminal");
+                }
                 accept
             } else {
                 reject
@@ -121,6 +157,19 @@ export component MainWindow inherits Window {
             if e.text == "\u{1b}" {
                 root.back();
                 accept
+            } else if e.modifiers.control && e.text == " " {
+                // Ctrl+Space: the rofi/SUPER+D launcher role — jump to the
+                // command bar (workspace only; overlays keep their focus).
+                if root.workspace-focus {
+                    input.focus();
+                }
+                accept
+            } else if e.modifiers.control && (e.text == "t" || e.text == "T") {
+                // Ctrl+T: the terminal, same slot path as the dock tile.
+                if root.workspace-focus {
+                    root.slot-activated("app-terminal");
+                }
+                accept
             } else {
                 reject
             }
@@ -131,6 +180,12 @@ export component MainWindow inherits Window {
         padding-top: Scale.space-10;
         padding-bottom: Scale.space-5;
         spacing: Scale.space-4;
+
+        // Hyprland-style glide: the whole workspace slides sideways as the
+        // app opens/closes (the padding class changes with `app-open`).
+        animate padding-left { duration: 180ms; easing: ease-out; }
+        animate padding-right { duration: 180ms; easing: ease-out; }
+        animate padding-top { duration: 180ms; easing: ease-out; }
 
         Rectangle {
             height: Scale.control-height;
@@ -197,9 +252,12 @@ export component MainWindow inherits Window {
     }
     }
 
-    // Left rail: always-visible app holders on phone widths.
-    if root.rails-visible: Rectangle {
-        x: 0px;
+    // Left rail: app holders on phone widths. Mounted permanently so the
+    // slide plays in both directions; the off-screen position plus the
+    // `left-rail-focus` gate keep it inert while hidden.
+    Rectangle {
+        x: root.rails-visible ? 0px : -root.rail-w;
+        animate x { duration: 180ms; easing: ease-out; }
         width: root.rail-w;
         height: root.height;
         background: ThemePalette.canvas-bg;
@@ -231,9 +289,10 @@ export component MainWindow inherits Window {
         }
     }
 
-    // Right rail: always-visible app holders on phone widths.
-    if root.rails-visible: Rectangle {
-        x: root.width - root.rail-w;
+    // Right rail: app holders on phone widths (same slide model as left).
+    Rectangle {
+        x: root.rails-visible ? root.width - root.rail-w : root.width;
+        animate x { duration: 180ms; easing: ease-out; }
         width: root.rail-w;
         height: root.height;
         background: ThemePalette.canvas-bg;
@@ -258,8 +317,12 @@ export component MainWindow inherits Window {
     }
 
     // Dim scrim behind a compact-mode drawer; also forwards swipes so a
-    // swipe-to-close works anywhere outside the drawer.
-    if (root.left-open || root.right-open) && !root.expanded: Rectangle {
+    // swipe-to-close works anywhere outside the drawer. Mounted so the
+    // fade-in plays; `visible` keeps it out of hit-testing when closed.
+    Rectangle {
+        visible: (root.left-open || root.right-open) && !root.expanded;
+        opacity: ((root.left-open || root.right-open) && !root.expanded) ? 1.0 : 0.0;
+        animate opacity { duration: 150ms; easing: ease-out; }
         background: ThemePalette.overlay-scrim;
         TouchArea {
             clicked => { root.close-overlays(); }
@@ -273,8 +336,10 @@ export component MainWindow inherits Window {
         }
     }
 
-    // Panel B: left drawer (gesture-opened; slides over the rail).
-    if !root.app-open: Rectangle {
+    // Panel B: left drawer (gesture-opened; slides over the rail). Mounted
+    // for the slide; hidden while an app owns the screen.
+    Rectangle {
+        visible: !root.app-open;
         width: root.drawer-w;
         height: root.height;
         x: root.left-visible ? 0px : -root.drawer-w;
@@ -308,7 +373,8 @@ export component MainWindow inherits Window {
     }
 
     // Panel C: right drawer (gesture-opened; slides over the rail).
-    if !root.app-open: Rectangle {
+    Rectangle {
+        visible: !root.app-open;
         width: root.drawer-w;
         height: root.height;
         x: root.right-visible ? root.width - root.drawer-w : root.width;
@@ -336,8 +402,12 @@ export component MainWindow inherits Window {
 
     // All Apps overlay (the A3 builtin slot): every installed app as a
     // tappable row with its monogram, plus a Store row. Replaces the old
-    // non-interactive text listing.
-    if root.apps-open: Rectangle {
+    // non-interactive text listing. Mounted so it can fade in; `visible`
+    // keeps it out of rendering, hit-testing and the Tab loop.
+    Rectangle {
+        visible: root.apps-open;
+        opacity: root.apps-open ? 1.0 : 0.0;
+        animate opacity { duration: 150ms; easing: ease-out; }
         background: ThemePalette.canvas-bg;
 
         // Swallow input so nothing underneath is triggered.
@@ -368,6 +438,7 @@ export component MainWindow inherits Window {
                 VerticalLayout {
                     spacing: Scale.space-2;
                     for row in root.app-rows: SlotRow {
+                        focusable: root.apps-open;
                         icon: row.icon;
                         label: row.label;
                         placeholder: row.placeholder;
@@ -379,6 +450,7 @@ export component MainWindow inherits Window {
             }
 
             ActionButton {
+                focusable: root.apps-open;
                 text: "CLOSE";
                 clicked => { root.close-overlays(); }
             }
@@ -386,7 +458,10 @@ export component MainWindow inherits Window {
     }
 
     // Module process monitor (double swipe-up / hold on the bottom anchor).
-    if root.monitor-open: Rectangle {
+    Rectangle {
+        visible: root.monitor-open;
+        opacity: root.monitor-open ? 1.0 : 0.0;
+        animate opacity { duration: 150ms; easing: ease-out; }
         background: ThemePalette.canvas-bg;
 
         // Swallow input so nothing underneath is triggered.
@@ -413,14 +488,17 @@ export component MainWindow inherits Window {
                 height: Scale.control-height;
                 spacing: Scale.space-2;
                 ActionButton {
+                    focusable: root.monitor-open;
                     text: "UNLOAD ALL";
                     clicked => { root.monitor-unload-all(); }
                 }
                 ActionButton {
+                    focusable: root.monitor-open;
                     text: "RESTART";
                     clicked => { root.monitor-restart-all(); }
                 }
                 ActionButton {
+                    focusable: root.monitor-open;
                     text: "CLOSE";
                     clicked => { root.close-overlays(); }
                 }
@@ -430,7 +508,10 @@ export component MainWindow inherits Window {
 
     // Module store (the `store` command). Rows come straight from the
     // catalog; statuses are computed by the reducer from on-disk state.
-    if root.store-open: Rectangle {
+    Rectangle {
+        visible: root.store-open;
+        opacity: root.store-open ? 1.0 : 0.0;
+        animate opacity { duration: 150ms; easing: ease-out; }
         background: ThemePalette.canvas-bg;
 
         // Swallow input so nothing underneath is triggered.
@@ -492,6 +573,7 @@ export component MainWindow inherits Window {
                             }
 
                             if item.actionable: ActionButton {
+                                focusable: root.store-open;
                                 width: 110px;
                                 text: item.status;
                                 primary: true;
@@ -513,14 +595,42 @@ export component MainWindow inherits Window {
                 height: Scale.control-height;
                 spacing: Scale.space-2;
                 ActionButton {
+                    focusable: root.store-open;
                     text: "REFRESH";
                     clicked => { root.store-refresh(); }
                 }
                 ActionButton {
+                    focusable: root.store-open;
                     text: "CLOSE";
                     clicked => { root.close-overlays(); }
                 }
             }
+        }
+    }
+
+    // waybar-style status bar (rice layer): live context, active theme,
+    // install count and clock — all real state, status only (no pointer
+    // handling, never focusable). Declared last so it sits above overlays,
+    // clearing them via their `padding-top: gutter-top`.
+    Rectangle {
+        x: 0px;
+        y: 0px;
+        width: root.width;
+        height: Scale.bar-height;
+        background: ThemePalette.surface-primary;
+        border-width: ThemePalette.border-width;
+        border-color: ThemePalette.surface-border;
+
+        HorizontalLayout {
+            padding-left: Scale.space-2;
+            padding-right: Scale.space-2;
+            spacing: Scale.space-2;
+
+            BarPill { text: root.bar-context; }
+            BarPill { text: root.bar-theme; accent: true; }
+            BarPill { text: root.bar-apps; }
+            Rectangle { horizontal-stretch: 1; background: transparent; }
+            BarPill { text: root.bar-clock; }
         }
     }
 }

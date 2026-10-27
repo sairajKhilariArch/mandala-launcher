@@ -106,6 +106,17 @@ fn run_inner(paths: HostPaths, exit_after_boot: bool) -> anyhow::Result<()> {
             }
         }
     }
+    // A wallpaper from last run restores its derived palette as the active
+    // theme; the manifest itself already loaded above via load_user_dir.
+    let wallpaper = std::fs::read_to_string(paths.root.join("wallpaper.path"))
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+    if wallpaper.is_some() {
+        if let Err(e) = themes.select(mandala_core::palette::DERIVED_ID) {
+            log::info!("wallpaper palette not restored ({e}); re-run `wallpaper <path>`");
+        }
+    }
     let after_themes = boot.elapsed();
 
     // One worker drives the router task (it is single-threaded by design) and
@@ -134,6 +145,17 @@ fn run_inner(paths: HostPaths, exit_after_boot: bool) -> anyhow::Result<()> {
     let after_window = boot.elapsed();
     let installed = installed_module_ids(&paths);
     mandala_ui::populate_slots(&ui, &installed);
+    // Restored rice wallpaper: the shell draws its own background so the
+    // glass panels have something to sit on.
+    if let Some(wp) = &wallpaper {
+        match slint::Image::load_from_path(std::path::Path::new(wp)) {
+            Ok(img) => {
+                ui.set_wallpaper_image(img);
+                ui.set_has_wallpaper(true);
+            }
+            Err(e) => log::warn!("wallpaper not restored: {e}"),
+        }
+    }
 
     let app = App::new(
         broker.clone(),
@@ -226,6 +248,21 @@ fn run_inner(paths: HostPaths, exit_after_boot: bool) -> anyhow::Result<()> {
     });
 
     let after_wiring = boot.elapsed();
+
+    // waybar clock: one tick a second is nothing next to the event loop.
+    let clock_timer = slint::Timer::default();
+    let clock_ui = ui.as_weak();
+    let tick_clock = move || {
+        if let Some(ui) = clock_ui.upgrade() {
+            ui.set_bar_clock(chrono::Local::now().format("%a %H:%M").to_string().into());
+        }
+    };
+    tick_clock();
+    clock_timer.start(
+        slint::TimerMode::Repeated,
+        std::time::Duration::from_secs(1),
+        move || tick_clock(),
+    );
 
     // Roadmap Phase 5 budget: report the real time to an interactive event
     // loop and the resident set, instead of asserting a target.
