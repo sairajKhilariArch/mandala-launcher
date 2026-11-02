@@ -129,6 +129,24 @@ driven by one command, `wallpaper <path>`:
   Status only — no pointer targets — themed through `Scale` and
   `ThemePalette` like everything else.
 
+## Home AI
+
+At home, phrases the grammar does not claim go to the Home AI layer
+(`mandala-core/src/assistant.rs`) before fuzzy app search. It turns plain
+speech into the same commands the grammar emits:
+
+- `remind me at 18:30 make coffee` / `at 6pm` / `9:15am` → alarm schedule
+- `remind me in 20 min(utes) …` / `timer 5 minutes` → relative alarm
+- `remind me at 07:00 @app-weather rain` → cross-app alarm via the IPC broker
+- `what time is it`, `my alarms`, `cancel alarm 2` → clock / alarm list / cancel
+- `add a note …`, `add task …` → notes / task tracker
+- `open <app>` / `launch <app>` → slot launch by fuzzy name
+
+Unrecognized phrases stay fuzzy app search; the interpreter never claims a
+phrase it cannot fully resolve (no time in a reminder, no app for `open`).
+Confirmations render through the standard canvas notice, so no new UI state
+exists — voice output reuses the token system unchanged.
+
 ## Accessibility
 
 * Body text ≥ 4.5:1 where it renders — enforced by

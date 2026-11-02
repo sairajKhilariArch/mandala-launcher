@@ -113,7 +113,7 @@ impl Default for AppState {
     }
 }
 
-pub const HOME_HINT: &str = "Type to search apps.\n= 2+2   calculate\nnote ...   quick note\n> ls   terminal\nask ...   assistant\nweather Berlin   forecast\nrss headlines   feeds\ntasks   habits\nchat   Matrix\ncamera   capture\n2fa   authenticator\nvault   passwords\nlsend   local transfer\nalarm 18:30 text   reminder\ntheme next   switch theme\ntheme <app> <name>   theme one app\nmonitor   module processes\nstore   browse & install modules";
+pub const HOME_HINT: &str = "Type to search apps.\n= 2+2   calculate\nnote ...   quick note\n> ls   terminal\nask ...   assistant\nremind me at 18:30 ...   reminder\nremind me in 20 min ...   relative alarm\nopen <app> / what time is it   talk to me\nweather Berlin   forecast\nrss headlines   feeds\ntasks   habits\nchat   Matrix\ncamera   capture\n2fa   authenticator\nvault   passwords\nlsend   local transfer\nalarm 18:30 text   reminder\ntheme next   switch theme\ntheme <app> <name>   theme one app\nmonitor   module processes\nstore   browse & install modules";
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Action {
@@ -204,12 +204,13 @@ pub enum Effect {
     /// Close the whole launcher: finish the Android activity (back to the
     /// system launcher) or quit the desktop event loop.
     ExitPlatform,
-    /// Schedule a one-shot alarm. `when` is `HH:MM`; the shell turns it into
-    /// epoch ms in the device's local zone and hands it to the scheduler.
-    /// `target` (an `@app-id` on the command) routes the alarm to a module,
-    /// else it surfaces as a home notice.
+    /// Schedule a one-shot alarm. `when` is an absolute `HH:MM` (the shell
+    /// turns it into epoch ms in the device's local zone) or a relative
+    /// `in`-duration from the Home AI. `target` (an `@app-id` on the
+    /// command) routes the alarm to a module, else it surfaces as a home
+    /// notice.
     ScheduleAlarm {
-        when: String,
+        when: AlarmWhen,
         text: String,
         target: Option<String>,
     },
@@ -219,6 +220,8 @@ pub enum Effect {
     CancelAlarm {
         index: usize,
     },
+    /// Show the wall clock on the canvas (Home AI time question).
+    TimeNow,
 }
 
 pub fn reduce(state: &mut AppState, action: Action) -> Vec<Effect> {
@@ -480,6 +483,7 @@ pub fn reduce(state: &mut AppState, action: Action) -> Vec<Effect> {
                     }
                     Err(usage) => state.canvas_text = usage.to_string(),
                 },
+                Command::Time => fx.push(Effect::TimeNow),
                 Command::Theme(key) => fx.push(Effect::SetTheme(key)),
                 Command::ThemeSet { app, key } => {
                     fx.push(Effect::SetAppTheme { app, key });
@@ -577,8 +581,29 @@ pub fn reduce(state: &mut AppState, action: Action) -> Vec<Effect> {
     fx
 }
 
-const ALARM_USAGE: &str =
-    "usage: alarm 18:30 text   |   alarm cancel 2   |   alarm   (list upcoming)";
+/// When an alarm should fire: an absolute local `HH:MM` (the shell
+/// resolves the next occurrence) or a relative duration in seconds from
+/// schedule time. Relative alarms come from Home AI dictations and the
+/// `alarm in N unit` grammar shape.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AlarmWhen {
+    /// Canonical `HH:MM`, resolved to the next occurrence by the shell.
+    HhMm(String),
+    /// Seconds from schedule time.
+    In(u64),
+}
+
+impl AlarmWhen {
+    /// Human shape for the confirmation line: `18:30` / `in 20 min`.
+    pub fn label(&self) -> String {
+        match self {
+            Self::HhMm(t) => t.clone(),
+            Self::In(secs) => crate::assistant::fmt_in(*secs),
+        }
+    }
+}
+
+const ALARM_USAGE: &str = "usage: alarm 18:30 text   |   alarm in 20 min text   |   alarm 18:30 @app-id text   |   alarm cancel 2   |   alarm   (list upcoming)";
 
 /// What a parsed `alarm …` command asked for.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -588,15 +613,16 @@ enum AlarmCmd {
         index: usize,
     },
     Schedule {
-        when: String,
+        when: AlarmWhen,
         text: String,
         target: Option<String>,
     },
 }
 
-/// `alarm` command surface: `HH:MM <text>` with an optional `@app-id` target
-/// right before the text routes the alarm to that module, else it fires as a
-/// home notice. `cancel N` removes the n-th upcoming; bare `alarm` lists.
+/// `alarm` command surface: `HH:MM <text>` or `in N unit <text>`, with an
+/// optional `@app-id` target right before the text routing the alarm to
+/// that module (Home AI dictations feed both shapes). `cancel N` removes
+/// the n-th upcoming; bare `alarm` lists.
 fn parse_alarm_command(args: &str) -> std::result::Result<AlarmCmd, &'static str> {
     let args = args.trim();
     if args.is_empty() {
@@ -608,6 +634,21 @@ fn parse_alarm_command(args: &str) -> std::result::Result<AlarmCmd, &'static str
         .and_then(|n| n.parse::<usize>().ok())
     {
         return Ok(AlarmCmd::Cancel { index: n });
+    }
+    // Relative: `in 20 min walk the dog` / `in 1 h`.
+    if let Some(rest) = args.strip_prefix("in") {
+        if let Some((secs, text)) = crate::assistant::parse_in_seconds(&format!("in {rest}")) {
+            let text = text.trim();
+            let text = text.strip_prefix("to ").unwrap_or(text);
+            if !text.is_empty() {
+                return Ok(AlarmCmd::Schedule {
+                    when: AlarmWhen::In(secs),
+                    text: text.to_string(),
+                    target: None,
+                });
+            }
+        }
+        return Err(ALARM_USAGE);
     }
     let Some((when, rest)) = args.split_once(char::is_whitespace) else {
         return Err(ALARM_USAGE);
@@ -626,7 +667,7 @@ fn parse_alarm_command(args: &str) -> std::result::Result<AlarmCmd, &'static str
         return Err(ALARM_USAGE);
     }
     Ok(AlarmCmd::Schedule {
-        when: when.to_string(),
+        when: AlarmWhen::HhMm(when.to_string()),
         text,
         target,
     })
@@ -764,7 +805,7 @@ mod tests {
         assert_eq!(
             fx,
             vec![Effect::ScheduleAlarm {
-                when: "18:30".into(),
+                when: AlarmWhen::HhMm("18:30".into()),
                 text: "make coffee".into(),
                 target: None
             }]
@@ -776,9 +817,19 @@ mod tests {
         assert_eq!(
             fx,
             vec![Effect::ScheduleAlarm {
-                when: "07:00".into(),
+                when: AlarmWhen::HhMm("07:00".into()),
                 text: "rain".into(),
                 target: Some("app-weather".into())
+            }]
+        );
+
+        s.query = "alarm in 20 min make coffee".into();
+        assert_eq!(
+            reduce(&mut s, Action::QuerySubmitted),
+            vec![Effect::ScheduleAlarm {
+                when: AlarmWhen::In(1200),
+                text: "make coffee".into(),
+                target: None
             }]
         );
 

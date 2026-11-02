@@ -8,6 +8,7 @@
 //! * [`state`]    – pure UDF reducer (`Action -> Effect`)
 //! * [`gesture`]  – thumb-zone gesture classifier
 //! * [`command`]  – fuzzy search and command grammar
+//! * [`assistant`] – Home AI: natural-language phrases -> commands
 //! * [`slots`]    – the 15-slot tri-panel matrix
 //! * [`theme`]    – JSON theme manifests and presets
 //! * [`palette`]  – wallpaper -> accent palette derivation (pywal-style)
@@ -15,6 +16,7 @@
 //! * [`sys`]      – process RSS introspection (performance budget)
 //! * [`catalog`]  – module store registry format and validation
 
+pub mod assistant;
 pub mod catalog;
 pub mod command;
 pub mod crypto;

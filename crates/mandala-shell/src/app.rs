@@ -7,7 +7,7 @@ use mandala_core::ipc_bus::{IpcEnvelope, MicrokernelIpcBroker, HOST};
 use mandala_core::loader::{format_monitor, ModuleHost};
 use mandala_core::scheduler::{now_ms, AlarmRequest, Scheduler};
 use mandala_core::slots;
-use mandala_core::state::{reduce, Action, AppState, Effect};
+use mandala_core::state::{reduce, Action, AlarmWhen, AppState, Effect};
 use mandala_core::theme::ThemeManager;
 use mandala_module_api::ModuleReply;
 use mandala_ui::MainWindow;
@@ -309,8 +309,12 @@ impl App {
                 let _ = slint::quit_event_loop();
             }
             Effect::ScheduleAlarm { when, text, target } => {
-                let Some(due) = Self::due_ms_from(&when) else {
-                    self.notice(format!("alarm: bad time `{when}`"));
+                let due = match &when {
+                    AlarmWhen::HhMm(hhmm) => Self::due_ms_from(hhmm),
+                    AlarmWhen::In(secs) => Some(now_ms() + secs * 1000),
+                };
+                let Some(due) = due else {
+                    self.notice(format!("alarm: bad time `{}`", when.label()));
                     return;
                 };
                 let req = AlarmRequest {
@@ -320,15 +324,24 @@ impl App {
                     action: "alarm".into(),
                     payload: serde_json::json!({ "ok": true, "text": text }).to_string(),
                 };
-                let tomorrow = Self::due_is_tomorrow(due);
+                let tomorrow = matches!(&when, AlarmWhen::HhMm(_)) && Self::due_is_tomorrow(due);
                 let via = target.map(|t| format!(" via {t}")).unwrap_or_default();
                 match lock(&self.scheduler).add(req) {
                     Ok(()) => self.notice(format!(
-                        "alarm set: {when} {text}{via}{}",
+                        "alarm set: {} {text}{via}{}",
+                        when.label(),
                         if tomorrow { " (tomorrow)" } else { "" }
                     )),
                     Err(e) => self.notice(format!("alarm: {e}")),
                 }
+            }
+            Effect::TimeNow => {
+                let t = Self::alarm_hhmm(now_ms());
+                self.notice(if t.is_empty() {
+                    "time: the device timezone is unreadable".to_string()
+                } else {
+                    format!("It's {t}.")
+                });
             }
             Effect::ListAlarms => {
                 self.notice(self.alarm_list_text());

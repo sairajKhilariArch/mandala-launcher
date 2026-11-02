@@ -112,6 +112,8 @@ pub enum Command {
     /// `alarm 18:30 make coffee` / `alarm cancel N` / bare `alarm` (list).
     /// Everything after `alarm` is spelled out to the shell by the reducer.
     Alarm(String),
+    /// Home AI phrase asking for the wall clock (`what time is it`).
+    Time,
     /// Launch the slot with this id.
     Launch(&'static str),
     Empty,
@@ -190,6 +192,11 @@ pub fn parse_command(input: &str) -> Command {
         "camera" | "shoot" => return Command::Camera,
         "alarm" | "schedule" => return Command::Alarm(tail.to_string()),
         _ => {}
+    }
+    // Home AI: everyday phrases become commands before fuzzy search gets
+    // a chance to misread a dictation as an app name.
+    if let Some(cmd) = crate::assistant::interpret(s) {
+        return cmd;
     }
     match search_slots(s, 1).first() {
         Some(slot) => Command::Launch(slot.id),
